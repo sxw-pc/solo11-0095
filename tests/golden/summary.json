@@ -1,0 +1,59 @@
+{
+  "stats": {
+    "data_files": 3,
+    "delete_files": 4,
+    "delete_operations": 10,
+    "applicable_deletes": 3,
+    "rows": 14,
+    "visible_rows": 8,
+    "hidden_rows": 6,
+    "expected_rows": 14,
+    "findings": 8,
+    "finding_errors": 1,
+    "finding_warnings": 7,
+    "diffs": 0
+  },
+  "reason_counts": {
+    "DELETED_BY_EQUALITY": 4,
+    "DELETED_BY_POSITION": 1,
+    "DELETED_BY_POSITION_AND_EQUALITY": 1,
+    "VISIBLE_NO_DELETE": 7,
+    "VISIBLE_STALE_DELETE_IGNORED": 1
+  },
+  "finding_codes": {
+    "AMBIGUOUS_EQUALITY_COLUMNS": 1,
+    "DELETE_SCHEMA_MISMATCH": 1,
+    "DUPLICATE_EQUALITY_DELETE": 1,
+    "DUPLICATE_POSITION_DELETE": 1,
+    "EQUALITY_NO_MATCH": 1,
+    "ORPHAN_DELETE_TARGET": 1,
+    "OUT_OF_RANGE_POSITION": 1,
+    "STALE_SEQUENCE": 1
+  },
+  "diff_summary": {
+    "MISSING_VISIBLE": 0,
+    "UNEXPECTED_VISIBLE": 0,
+    "EXTRA_EXPECTED_ROW": 0,
+    "MISSING_EXPECTED_ROW": 0,
+    "total": 0
+  },
+  "visible_rows": [
+    "base_001:3:R0004",
+    "base_002:1:R0007",
+    "base_002:2:R0008",
+    "base_003:0:R0010",
+    "base_003:1:R0011",
+    "base_003:2:R0012",
+    "base_003:3:R0013",
+    "base_003:4:R0014"
+  ],
+  "hidden_rows": [
+    "base_001:0:R0001",
+    "base_001:1:R0002",
+    "base_001:2:R0003",
+    "base_001:4:R0005",
+    "base_002:0:R0006",
+    "base_002:3:R0009"
+  ],
+  "json_sha256": "d18d5cc9c8beed6dcc8b57bce362275dadcbd480aafdc5c44ad2a5f3f341fe04"
+}

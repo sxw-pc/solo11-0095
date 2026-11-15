@@ -1,0 +1,5 @@
+_row_id,_row_pos,category,region,amount,event_date
+R0006,0,zeta,north,600,2024-02-01
+R0007,1,eta,east,700,2024-02-02
+R0008,2,theta,south,800,2024-02-03
+R0009,3,iota,north,900,2024-02-04

@@ -1,0 +1,6 @@
+_row_id,_row_pos,category,region,amount,event_date
+R0001,0,alpha,north,100,2024-01-01
+R0002,1,beta,south,200,2024-01-02
+R0003,2,gamma,north,300,2024-01-03
+R0004,3,delta,west,400,2024-01-04
+R0005,4,epsilon,north,500,2024-01-05

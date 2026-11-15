@@ -1,0 +1,73 @@
+{
+  "snapshot_id": "snap_001",
+  "sequence_number": 5,
+  "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97",
+  "created_at": "2024-06-01T00:00:00Z",
+  "data_files": [
+    {
+      "file_id": "base_001",
+      "path": "data/base_001.csv",
+      "format": "csv",
+      "row_count": 5,
+      "sha256": "3793de7253b1b9966aa9c0ae04af481e6813a01ff5739c4499f8fc07d5db9080",
+      "sequence_number": 2,
+      "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97"
+    },
+    {
+      "file_id": "base_002",
+      "path": "data/base_002.csv",
+      "format": "csv",
+      "row_count": 4,
+      "sha256": "775b8d72044438fa964241207ff0b8491ea1803873c9148b3b1a1e8aa167b581",
+      "sequence_number": 3,
+      "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97"
+    },
+    {
+      "file_id": "base_003",
+      "path": "data/base_003.jsonl",
+      "format": "jsonl",
+      "row_count": 5,
+      "sha256": "7ed81c226ae7b2032fcd56e479683c663e19b227dbd9ca51c270fe1d09a4ca10",
+      "sequence_number": 5,
+      "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97"
+    }
+  ],
+  "delete_files": [
+    {
+      "file_id": "pos_010",
+      "path": "deletes/pos_010.jsonl",
+      "delete_kind": "position",
+      "sequence_number": 5,
+      "target_file_id": "base_001",
+      "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97",
+      "sha256": "df91c9f0dbd11a6bd5c9c33eaa98a0bf1bb602bc941cb9ad7fe9ff1a046a3388"
+    },
+    {
+      "file_id": "pos_011",
+      "path": "deletes/pos_011.jsonl",
+      "delete_kind": "position",
+      "sequence_number": 2,
+      "target_file_id": "base_003",
+      "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97",
+      "sha256": "fc91818ea2571f9fbe8a9c7e81aebfb327be698d08c5fb7ccac12e58d93b3e9a"
+    },
+    {
+      "file_id": "eq_020",
+      "path": "deletes/eq_020.jsonl",
+      "delete_kind": "equality",
+      "sequence_number": 4,
+      "equality_columns": ["region"],
+      "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97",
+      "sha256": "f15fd70b82c0f4704d47931a9f962f1a56cba29f5de059dc482fa2db3d5e70af"
+    },
+    {
+      "file_id": "eq_021",
+      "path": "deletes/eq_021.jsonl",
+      "delete_kind": "equality",
+      "sequence_number": 5,
+      "equality_columns": ["department"],
+      "schema_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sha256": "6add33c921664254fc095a470a7a42e60a2e730519a29f39a6b1ff75474eddc8"
+    }
+  ]
+}

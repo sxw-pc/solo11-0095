@@ -1,0 +1,23 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>行删镜审计报告 - snap_001</title>
+<style>body{font-family:-apple-system,Segoe UI,Microsoft YaHei,sans-serif;margin:0;background:#f5f7fa;color:#1f2937;line-height:1.55}main{max-width:1080px;margin:0 auto;padding:32px 20px}h1{font-size:28px;margin:0 0 8px}h2{font-size:19px;margin-top:28px}.card{background:#fff;border:1px solid #dbe2ea;border-radius:10px;padding:18px 20px;margin:14px 0;box-shadow:0 1px 2px #0001}table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #e5e7eb}th{background:#eef2f7}.warning{color:#92400e}.error{color:#991b1b}code{background:#eef2f7;padding:1px 4px;border-radius:4px}.muted{color:#6b7280}.num{text-align:right}</style></head><body><main>
+<h1>行删镜审计报告</h1>
+<p class="muted">表 离线演示湖表 / 快照 snap_001 / 规则 MOR-1.0</p>
+<section class="card" id="summary"><h2>结论</h2><p>未发现期望可见性差异。</p>
+<p>工作区指纹 <code>f4e64d4d5301701b94f3b95196054df750bc90597f29fe5b49bd2087d3cc89ce</code></p>
+<table><thead><tr><th>指标</th><th>值</th></tr></thead><tbody><tr><td>data_files</td><td>3</td></tr><tr><td>delete_files</td><td>4</td></tr><tr><td>delete_operations</td><td>10</td></tr><tr><td>rows</td><td>14</td></tr><tr><td>visible_rows</td><td>8</td></tr><tr><td>hidden_rows</td><td>6</td></tr><tr><td>findings</td><td>8</td></tr><tr><td>diffs</td><td>0</td></tr></tbody></table>
+</section>
+<section class="card" id="findings"><h2>问题分类</h2>
+<table><thead><tr><th>错误码</th><th>级别</th><th>文件</th><th>行</th><th>说明</th></tr></thead><tbody><tr><td>DUPLICATE_EQUALITY_DELETE</td><td>warning</td><td>deletes/eq_020.jsonl</td><td>2</td><td>同一删除文件内重复等值键</td></tr><tr><td>EQUALITY_NO_MATCH</td><td>warning</td><td>deletes/eq_020.jsonl</td><td>3</td><td>等值删除没有得到任何匹配行</td></tr><tr><td>AMBIGUOUS_EQUALITY_COLUMNS</td><td>warning</td><td>deletes/eq_021.jsonl</td><td>-</td><td>等值删除列缺失、重复或不在模式中</td></tr><tr><td>DELETE_SCHEMA_MISMATCH</td><td>error</td><td>deletes/eq_021.jsonl</td><td>-</td><td>删除文件模式哈希与表模式不一致</td></tr><tr><td>STALE_SEQUENCE</td><td>warning</td><td>deletes/pos_011.jsonl</td><td>-</td><td>删除文件序列号早于目标数据文件</td></tr><tr><td>DUPLICATE_POSITION_DELETE</td><td>warning</td><td>deletes/pos_011.jsonl</td><td>2</td><td>同一目标位置被重复删除</td></tr><tr><td>OUT_OF_RANGE_POSITION</td><td>warning</td><td>deletes/pos_011.jsonl</td><td>3</td><td>位置删除越界</td></tr><tr><td>ORPHAN_DELETE_TARGET</td><td>warning</td><td>deletes/pos_011.jsonl</td><td>4</td><td>位置删除目标文件不存在</td></tr></tbody></table>
+</section><section class="card" id="diffs"><h2>差异样例</h2>
+<p>未发现差异。</p>
+</section><section class="card" id="visibility"><h2>可见性摘要</h2>
+<table><thead><tr><th>reason_code</th><th>行数</th></tr></thead><tbody><tr><td>DELETED_BY_EQUALITY</td><td>4</td></tr><tr><td>DELETED_BY_POSITION</td><td>1</td></tr><tr><td>DELETED_BY_POSITION_AND_EQUALITY</td><td>1</td></tr><tr><td>VISIBLE_NO_DELETE</td><td>7</td></tr><tr><td>VISIBLE_STALE_DELETE_IGNORED</td><td>1</td></tr></tbody></table>
+</section>
+<section class="card" id="limitations"><h2>限制说明</h2><ul>
+<li>只支持本项目定义的本地 CSV/JSONL fixture 与 JSON 清单，不读取 Parquet、ORC 或真实湖表。</li><li>不实现 Iceberg、Delta Lake、Hudi 的协议、快照时间旅行、compaction 或模式演进。</li><li>不会修改任何数据文件或删除文件；所有建议均为说明性输出。</li><li>类型系统仅覆盖 string、long、date，完成最小格式校验，不做数据库级类型强制。</li><li>等值删除只比较规范化后的字段值；缺失字段不参与匹配，空值按显式 null/空串规则处理。</li><li>报告只包含摘要、finding、差异和决定链摘要，逐行完整链保存在 SQLite 台账。</li>
+</ul></section>
+<p class="muted">台账：<code>out/demo/ledger.sqlite</code></p>
+<p class="muted">本报告完全离线生成，不引用 CDN、外部字体或脚本。</p>
+</main></body></html>

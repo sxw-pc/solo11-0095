@@ -1,0 +1,4 @@
+{"file_id":"base_003","row_pos":0,"reason":"fixture: stale positional delete"}
+{"file_id":"base_003","row_pos":0,"reason":"fixture: duplicate positional delete"}
+{"file_id":"base_003","row_pos":9,"reason":"fixture: out of range positional delete"}
+{"file_id":"base_ghost","row_pos":1,"reason":"fixture: orphan positional delete"}
