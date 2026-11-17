@@ -1,0 +1,94 @@
+{
+  "design": "srswor_by_region_before_deletion",
+  "seed": 2026,
+  "before_snapshot": "before",
+  "after_snapshot": "after",
+  "sample_size_by_region": {
+    "east": 10,
+    "west": 10
+  },
+  "selection_policy": "random_draw_before_delete",
+  "deletion_policy": "lowest_five_unselected_east_ids_after_draw",
+  "inspections": [
+    {
+      "row_id": "Q0004",
+      "defect": false
+    },
+    {
+      "row_id": "Q0009",
+      "defect": false
+    },
+    {
+      "row_id": "Q0010",
+      "defect": false
+    },
+    {
+      "row_id": "Q0011",
+      "defect": false
+    },
+    {
+      "row_id": "Q0013",
+      "defect": false
+    },
+    {
+      "row_id": "Q0015",
+      "defect": false
+    },
+    {
+      "row_id": "Q0016",
+      "defect": false
+    },
+    {
+      "row_id": "Q0017",
+      "defect": false
+    },
+    {
+      "row_id": "Q0018",
+      "defect": false
+    },
+    {
+      "row_id": "Q0020",
+      "defect": false
+    },
+    {
+      "row_id": "Q0021",
+      "defect": false
+    },
+    {
+      "row_id": "Q0022",
+      "defect": false
+    },
+    {
+      "row_id": "Q0024",
+      "defect": false
+    },
+    {
+      "row_id": "Q0030",
+      "defect": false
+    },
+    {
+      "row_id": "Q0032",
+      "defect": false
+    },
+    {
+      "row_id": "Q0034",
+      "defect": false
+    },
+    {
+      "row_id": "Q0035",
+      "defect": false
+    },
+    {
+      "row_id": "Q0036",
+      "defect": false
+    },
+    {
+      "row_id": "Q0038",
+      "defect": false
+    },
+    {
+      "row_id": "Q0039",
+      "defect": false
+    }
+  ]
+}

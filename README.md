@@ -24,6 +24,16 @@ python -m lakedel demo
 python -m unittest discover -s tests -v
 ```
 
+## 删除后质检抽样证据样例
+
+隔离的 `examples/quality_transfer` 包含同一批 40 行的删除前后审计快照。`draw.json` 固定删除前在 east、west 各无放回抽 10 行，并给出人工质检结果；删除后，位置删除文件隐藏 east 的 5 条未抽中行。只读入口核对两次审计、样本身份、删除策略和剩余可见总体，暂不签发总体缺陷上界或发布结论：
+
+```bash
+PYTHONPATH=src python -B -m lakedel.cohort_transfer --root examples/quality_transfer --draw examples/quality_transfer/draw.json
+```
+
+输出绑定两次审计的 `run_key`，报告删除前后分层行数和已检行数；`population_upper_bounds` 与 `publication_decision` 保持 `null`，留给后续质量发布流程。
+
 ## 删除请求履约样例
 
 隔离的 `examples/request_lake` 以 `_row_id` 声明删除请求，并提供三个按序快照。新增只读命令按快照顺序重算可见性，报告请求在各观察时点的待履约、按期履约、逾期履约、违约、再出现或证据不确定状态，不修改湖文件：
