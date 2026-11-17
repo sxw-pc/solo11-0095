@@ -1,0 +1,23 @@
+{
+  "snapshot_id": "snap_001",
+  "documents": [
+    {"row_id":"R0001","region":"north","terms":["lake","repair","repair"]},
+    {"row_id":"R0002","region":"south","terms":["lake","audit"]},
+    {"row_id":"R0003","region":"north","terms":["repair","guide"]},
+    {"row_id":"R0004","region":"west","terms":["lake","delta","repair"]},
+    {"row_id":"R0005","region":"north","terms":["lake","lake","guide"]},
+    {"row_id":"R0006","region":"north","terms":["audit","repair"]},
+    {"row_id":"R0007","region":"east","terms":["lake","audit"]},
+    {"row_id":"R0008","region":"south","terms":["lake","repair","guide"]},
+    {"row_id":"R0009","region":"north","terms":["delta","repair"]},
+    {"row_id":"R0010","region":"west","terms":["delta","audit","repair"]},
+    {"row_id":"R0011","region":"north","terms":["lake","audit","repair"]},
+    {"row_id":"R0012","region":"east","terms":["repair","guide"]},
+    {"row_id":"R0013","region":"south","terms":["lake","guide"]},
+    {"row_id":"R0014","region":"west","terms":["audit","guide"]}
+  ],
+  "queries": [
+    {"query_id":"q-repair","terms":["lake","repair"],"top_k":2},
+    {"query_id":"q-guide","terms":["audit","guide"],"top_k":2}
+  ]
+}
