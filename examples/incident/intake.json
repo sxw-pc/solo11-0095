@@ -1,0 +1,22 @@
+{
+  "snapshot_id": "snap_001",
+  "run_key": "3c254ae809a08b7f4b9632994c6ed11b55f836d34404e8491379a6f100672bd0",
+  "finding_code": "ORPHAN_DELETE_TARGET",
+  "finding_file": "deletes/orphan.jsonl",
+  "finding_row": null,
+  "finding_digest": "9176dd7820b04482def07947ac7cd7667c4d4d753333257546bdfb759cc614e8",
+  "primary": "reviewer-primary",
+  "backup": "reviewer-backup",
+  "steward": "evidence-steward",
+  "detected_at": "2024-06-01T09:00:00Z",
+  "primary_deadline_minutes": 5,
+  "bounded_lateness_minutes": 7,
+  "events": [
+    {"event_id": "timer-1", "kind": "TIMER", "occurred_at": "2024-06-01T09:05:00Z", "received_at": "2024-06-01T09:05:00Z"},
+    {"event_id": "timer-1", "kind": "TIMER", "occurred_at": "2024-06-01T09:05:00Z", "received_at": "2024-06-01T09:06:00Z"},
+    {"event_id": "old-ack", "kind": "PRIMARY_ACK", "occurred_at": "2024-06-01T09:03:00Z", "received_at": "2024-06-01T09:07:00Z", "run_key": "old-audit"},
+    {"event_id": "primary-ack", "kind": "PRIMARY_ACK", "occurred_at": "2024-06-01T09:04:00Z", "received_at": "2024-06-01T09:09:00Z"},
+    {"event_id": "steward-ack", "kind": "STEWARD_ACK", "occurred_at": "2024-06-01T09:08:00Z", "received_at": "2024-06-01T09:11:00Z"}
+  ],
+  "contracts": ["rapid_containment", "evidence_review"]
+}
