@@ -26,11 +26,7 @@ class AttendanceReleaseIntakeTests(unittest.TestCase):
 
     def test_alternative_grids_preserve_all_margins(self):
         witness = json.loads((ROOT / "examples/attendance_release/witness.json").read_text(encoding="utf-8"))
-        grids = [
-            {"local": {"morning": 2, "afternoon": 6, "evening": 5},
-             "visiting": {"morning": 7, "afternoon": 4, "evening": 8}},
-            *witness["alternative_grids"],
-        ]
+        grids = [witness["audited_visible_grid"], *witness["alternative_grids"]]
         self.assertEqual({g["local"]["morning"] for g in grids}, {1, 2, 3})
         for grid in grids:
             self.assertEqual([sum(grid[row].values()) for row in ["local", "visiting"]], [13, 19])

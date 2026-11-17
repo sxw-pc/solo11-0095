@@ -1,11 +1,54 @@
 {
   "sensitive_cell": "local:morning",
   "naive_reconstructed_count": 2,
-  "margin_priority_hidden_cells": ["local:morning", "local:afternoon", "visiting:morning", "visiting:afternoon"],
-  "detail_priority_hidden_row_totals": ["local"],
-  "detail_priority_hidden_column_totals": ["morning"],
+  "margin_priority_hidden_cells": [
+    "local:morning",
+    "local:afternoon",
+    "visiting:morning",
+    "visiting:afternoon"
+  ],
+  "detail_priority_hidden_row_totals": [
+    "local"
+  ],
+  "detail_priority_hidden_column_totals": [
+    "morning"
+  ],
   "alternative_grids": [
-    {"local": {"morning": 1, "afternoon": 7, "evening": 5}, "visiting": {"morning": 8, "afternoon": 3, "evening": 8}},
-    {"local": {"morning": 3, "afternoon": 5, "evening": 5}, "visiting": {"morning": 6, "afternoon": 5, "evening": 8}}
-  ]
+    {
+      "local": {
+        "morning": 1,
+        "afternoon": 7,
+        "evening": 5
+      },
+      "visiting": {
+        "morning": 8,
+        "afternoon": 3,
+        "evening": 8
+      }
+    },
+    {
+      "local": {
+        "morning": 3,
+        "afternoon": 5,
+        "evening": 5
+      },
+      "visiting": {
+        "morning": 6,
+        "afternoon": 5,
+        "evening": 8
+      }
+    }
+  ],
+  "audited_visible_grid": {
+    "local": {
+      "morning": 2,
+      "afternoon": 6,
+      "evening": 5
+    },
+    "visiting": {
+      "morning": 7,
+      "afternoon": 4,
+      "evening": 8
+    }
+  }
 }
