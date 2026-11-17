@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from lakedel.search_corpus import inspect_search_corpus
-from lakedel.search_blocks import inspect_search_blocks
+from lakedel.search_blocks import BlockQueryStore, inspect_search_blocks
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,8 +14,17 @@ class SearchCorpusTest(unittest.TestCase):
         result = inspect_search_blocks(ROOT / "examples/search_lake")
         self.assertEqual(result["visible_count"], 992)
         self.assertEqual(result["visible_term_df"]["repair"], 1)
-        self.assertEqual(result["maximum_document_fetches"], 64)
+        self.assertEqual(result["maximum_block_fetches"], 2)
         self.assertIsNone(result["rankings"])
+
+    def test_query_store_enforces_two_block_reads(self):
+        workspace = ROOT / "examples/search_lake"
+        store = BlockQueryStore(workspace, 2)
+        self.assertTrue(store.blocks("repair"))
+        self.assertTrue(store.fetch("repair", 31))
+        self.assertTrue(store.fetch("audit", 21))
+        with self.assertRaisesRegex(ValueError, "budget exceeded"):
+            store.fetch("audit", 20)
 
     def test_visible_corpus_uses_real_delete_audit(self):
         result = inspect_search_corpus(ROOT / "examples/lake",

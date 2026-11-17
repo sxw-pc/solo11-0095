@@ -62,7 +62,7 @@ def generate() -> None:
             terms.append("audit")
         if number == 700:
             terms.extend(["audit", "audit"])
-        documents.append({"row_id": row_id, "region": region, "terms": terms})
+        documents.append({"row_id": row_id, "region": region})
         for term, tf in Counter(terms).items():
             postings[term][pos // 32].append({"row_id": row_id, "tf": tf})
     data_hash = write("data/search.csv", data_buffer.getvalue())
@@ -85,19 +85,24 @@ def generate() -> None:
     catalog = {
         "snapshot_id": "search_after", "documents": documents,
         "queries": [{"query_id": "repair_audit", "terms": ["repair", "audit"], "top_k": 2}],
-        "query_budget": {"maximum_document_fetches": 64},
+        "query_budget": {"maximum_block_fetches": 2},
         "ranking_contracts": [
             {"name": "lexical", "required_regions": []},
             {"name": "regional", "required_regions": ["south"]},
         ],
     }
     write("search_catalog.json", payload(catalog))
+    index_terms = {}
+    for term, blocks in sorted(postings.items()):
+        index_terms[term] = []
+        for block, items in sorted(blocks.items()):
+            path = f"index/{term}/{block:02d}.json"
+            write(path, payload(items))
+            index_terms[term].append({"block": block,
+                                      "max_tf": max(item["tf"] for item in items),
+                                      "path": path})
     index = {"snapshot_id": "search_after", "block_size": 32,
-             "postings": {term: [
-                 {"block": block, "max_tf": max(item["tf"] for item in items),
-                  "items": items}
-                 for block, items in sorted(blocks.items())]
-                 for term, blocks in sorted(postings.items())}}
+             "postings": index_terms}
     write("search_blocks.json", payload(index))
 
 

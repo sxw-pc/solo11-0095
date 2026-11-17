@@ -1,61 +1,99 @@
-"""Validate a fixed block-posting index without serving a ranked query."""
+"""Validate an auditable block index and enforce its online query read budget."""
 
 from __future__ import annotations
 
 import json
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .search_corpus import inspect_search_corpus
+from .engine import execute_audit
+
+
+class BlockQueryStore:
+    """Only block summaries are free; opening a posting block spends the limit."""
+
+    def __init__(self, workspace: Path, maximum_block_fetches: int):
+        self.workspace = workspace
+        self.maximum_block_fetches = maximum_block_fetches
+        self.block_fetches = 0
+        self.index = json.loads((workspace / "search_blocks.json").read_text(encoding="utf-8"))
+
+    def blocks(self, term: str) -> list[dict[str, Any]]:
+        return self.index["postings"].get(term, [])
+
+    def fetch(self, term: str, block_number: int) -> list[dict[str, Any]]:
+        metadata = next((item for item in self.blocks(term) if item["block"] == block_number), None)
+        if metadata is None:
+            raise ValueError("term block is absent")
+        if self.block_fetches >= self.maximum_block_fetches:
+            raise ValueError("query block fetch budget exceeded")
+        self.block_fetches += 1
+        return json.loads((self.workspace / metadata["path"]).read_text(encoding="utf-8"))
 
 
 def inspect_search_blocks(workspace: Path) -> dict[str, Any]:
-    catalog_path = workspace / "search_catalog.json"
-    index_path = workspace / "search_blocks.json"
-    corpus = inspect_search_corpus(workspace, catalog_path)
-    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    if index.get("snapshot_id") != corpus["snapshot_id"] or index.get("block_size") != 32:
+    """Build-time validation; future online ranking must use BlockQueryStore."""
+    audit = execute_audit(workspace)
+    if audit.stats["finding_errors"] or audit.stats["diffs"]:
+        raise ValueError("search index requires a clean visibility audit")
+    catalog = json.loads((workspace / "search_catalog.json").read_text(encoding="utf-8"))
+    index = json.loads((workspace / "search_blocks.json").read_text(encoding="utf-8"))
+    if (catalog.get("snapshot_id") != audit.workspace.snapshot.snapshot_id
+            or index.get("snapshot_id") != audit.workspace.snapshot.snapshot_id
+            or index.get("block_size") != 32):
         raise ValueError("search index does not match audited snapshot")
-    documents = catalog["documents"]
-    positions = {item["row_id"]: position for position, item in enumerate(documents)}
-    expected: dict[str, list[tuple[int, str, int]]] = {}
-    for position, item in enumerate(documents):
-        for term, tf in Counter(item["terms"]).items():
-            expected.setdefault(term, []).append((position // 32, item["row_id"], tf))
-    observed: dict[str, list[tuple[int, str, int]]] = {}
+    documents = catalog.get("documents")
+    if not isinstance(documents, list) or len(documents) != len(audit.workspace.rows):
+        raise ValueError("catalog must cover audited row universe")
+    positions = {item.get("row_id"): pos for pos, item in enumerate(documents)}
+    if len(positions) != len(documents):
+        raise ValueError("duplicate catalog row")
+    rows = {row.row_id: row for row in audit.workspace.rows}
+    if set(positions) != set(rows):
+        raise ValueError("catalog row differs from audited row")
+    for item in documents:
+        if item.get("region") != rows[item["row_id"]].values.get("region"):
+            raise ValueError("catalog region differs from audited row")
+    visible = {row.row_id for row, decision in zip(audit.workspace.rows, audit.decisions)
+               if decision.visible}
     postings = index.get("postings")
     if not isinstance(postings, dict):
-        raise ValueError("search index postings are missing")
+        raise ValueError("search block directory is absent")
+    term_df: dict[str, int] = {}
+    seen_paths: set[str] = set()
     for term, blocks in postings.items():
-        seen_blocks: set[int] = set()
-        for block in blocks:
-            number = block.get("block")
-            if not isinstance(number, int) or number in seen_blocks:
-                raise ValueError("repeated or invalid index block")
-            seen_blocks.add(number)
-            items = block.get("items")
+        if not isinstance(term, str) or not isinstance(blocks, list):
+            raise ValueError("invalid term directory")
+        seen_rows: set[str] = set()
+        seen_numbers: set[int] = set()
+        for metadata in blocks:
+            number, label = metadata.get("block"), metadata.get("path")
+            if (not isinstance(number, int) or number in seen_numbers
+                    or not isinstance(label, str) or label in seen_paths
+                    or label != f"index/{term}/{number:02d}.json"):
+                raise ValueError("invalid or repeated posting block")
+            seen_numbers.add(number)
+            seen_paths.add(label)
+            items = json.loads((workspace / label).read_text(encoding="utf-8"))
             if not isinstance(items, list) or not items:
-                raise ValueError("empty index block")
-            if block.get("max_tf") != max(item.get("tf", -1) for item in items):
-                raise ValueError("index block upper bound mismatch")
+                raise ValueError("empty posting block")
+            if metadata.get("max_tf") != max(item.get("tf", -1) for item in items):
+                raise ValueError("block upper bound mismatch")
             for item in items:
                 row_id, tf = item.get("row_id"), item.get("tf")
-                if row_id not in positions or positions[row_id] // 32 != number:
-                    raise ValueError("index block points outside its row range")
-                observed.setdefault(term, []).append((number, row_id, tf))
-    if observed != expected:
-        raise ValueError("index postings differ from catalog terms")
-    limit = catalog.get("query_budget", {}).get("maximum_document_fetches")
-    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit < len(documents):
-        raise ValueError("query fetch budget must be below corpus size")
+                if (row_id not in positions or row_id in seen_rows
+                        or positions[row_id] // 32 != number
+                        or isinstance(tf, bool) or not isinstance(tf, int) or tf <= 0):
+                    raise ValueError("invalid posting")
+                seen_rows.add(row_id)
+        term_df[term] = len(seen_rows & visible)
+    limit = catalog.get("query_budget", {}).get("maximum_block_fetches")
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit < len(seen_paths):
+        raise ValueError("query block budget is absent")
     return {
-        "run_key": corpus["run_key"], "snapshot_id": corpus["snapshot_id"],
-        "visible_count": corpus["visible_count"],
-        "visible_term_df": corpus["term_document_frequency"],
-        "index_blocks": sum(len(blocks) for blocks in postings.values()),
-        "maximum_document_fetches": limit,
+        "run_key": audit.run_key, "snapshot_id": audit.workspace.snapshot.snapshot_id,
+        "visible_count": len(visible), "visible_term_df": dict(sorted(term_df.items())),
+        "index_blocks": len(seen_paths), "maximum_block_fetches": limit,
         "ranking_contracts": sorted(item["name"] for item in catalog["ranking_contracts"]),
         "rankings": None,
     }
