@@ -17,18 +17,32 @@ class BlockQueryStore:
         self.maximum_block_fetches = maximum_block_fetches
         self.block_fetches = 0
         self.index = json.loads((workspace / "search_blocks.json").read_text(encoding="utf-8"))
+        self._cache: dict[int, dict[str, list[dict[str, Any]]]] = {}
 
     def blocks(self, term: str) -> list[dict[str, Any]]:
         return self.index["postings"].get(term, [])
 
-    def fetch(self, term: str, block_number: int) -> list[dict[str, Any]]:
-        metadata = next((item for item in self.blocks(term) if item["block"] == block_number), None)
-        if metadata is None:
-            raise ValueError("term block is absent")
+    def fetch_block(self, block_number: int) -> dict[str, list[dict[str, Any]]]:
+        if block_number in self._cache:
+            return self._cache[block_number]
         if self.block_fetches >= self.maximum_block_fetches:
             raise ValueError("query block fetch budget exceeded")
+        content: dict[str, list[dict[str, Any]]] = {}
+        for term in self.index["postings"]:
+            metadata = next((item for item in self.blocks(term)
+                             if item["block"] == block_number), None)
+            if metadata is not None:
+                content[term] = json.loads((self.workspace / metadata["path"]).read_text(encoding="utf-8"))
+        if not content:
+            raise ValueError("posting block is absent")
         self.block_fetches += 1
-        return json.loads((self.workspace / metadata["path"]).read_text(encoding="utf-8"))
+        self._cache[block_number] = content
+        return content
+
+    def fetch(self, term: str, block_number: int) -> list[dict[str, Any]]:
+        if not any(item["block"] == block_number for item in self.blocks(term)):
+            raise ValueError("term block is absent")
+        return self.fetch_block(block_number)[term]
 
 
 def inspect_search_blocks(workspace: Path) -> dict[str, Any]:

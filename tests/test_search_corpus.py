@@ -22,6 +22,8 @@ class SearchCorpusTest(unittest.TestCase):
         store = BlockQueryStore(workspace, 2)
         self.assertTrue(store.blocks("repair"))
         self.assertTrue(store.fetch("repair", 31))
+        self.assertTrue(store.fetch("audit", 31))
+        self.assertEqual(store.block_fetches, 1)
         self.assertTrue(store.fetch("audit", 21))
         with self.assertRaisesRegex(ValueError, "budget exceeded"):
             store.fetch("audit", 20)
