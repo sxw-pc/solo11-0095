@@ -14,6 +14,25 @@ def _matches_equality(row: RowRecord, operation: DeleteOperation) -> bool:
     return all(row.values.get(name) == value for name, value in operation.key.items())
 
 
+def position_hit(row: RowRecord, operation: DeleteOperation) -> bool:
+    """位置删除命中判定，与 compute_visibility 使用同一语义。"""
+    return (
+        operation.applicable
+        and operation.target_file_id == row.file_id
+        and operation.row_pos == row.row_pos
+    )
+
+
+def equality_hit(row: RowRecord, operation: DeleteOperation, data_sequence: int) -> bool:
+    """等值删除命中判定（含序列号作用域），与 compute_visibility 同一语义。"""
+    return (
+        operation.applicable
+        and data_sequence <= operation.sequence_number
+        and (not operation.target_file_id or operation.target_file_id == row.file_id)
+        and _matches_equality(row, operation)
+    )
+
+
 def _chain(
     visible: bool,
     reason: str,
@@ -74,22 +93,11 @@ def compute_visibility(
     for row in rows:
         data_sequence = sequences.get(row.file_id, 1 << 30)
         position_hits = sorted(
-            [
-                op for op in position_ops
-                if op.applicable
-                and op.target_file_id == row.file_id
-                and op.row_pos == row.row_pos
-            ],
+            [op for op in position_ops if position_hit(row, op)],
             key=lambda op: (op.delete_file_id, op.ordinal),
         )
         equality_hits = sorted(
-            [
-                op for op in equality_ops
-                if op.applicable
-                and data_sequence <= op.sequence_number
-                and (not op.target_file_id or op.target_file_id == row.file_id)
-                and _matches_equality(row, op)
-            ],
+            [op for op in equality_ops if equality_hit(row, op, data_sequence)],
             key=lambda op: (op.delete_file_id, op.ordinal),
         )
         stale_hits = sorted(

@@ -103,19 +103,32 @@ CSV 首行为表头，必须含 `_row_pos`，可选 `_row_id`，其余列对应 
 | `MISSING_EXPECTED_ROW` | error | 数据行未被期望文件覆盖 |
 | `ROW_NOT_FOUND` | error | explain 未找到目标行 |
 | `LEDGER_CHECK_FAILED` | error | 台账缺失、损坏或校验失败 |
+| `REPAIR_PLAN_INVALID` | error | 修复计划文件缺失、非法或结构不完整 |
+| `REPAIR_PLAN_MISMATCH` | error | 修复计划与当前审计上下文（指纹/快照/规则版本）不一致 |
 | `CLI_USAGE` | error | 命令行参数非法 |
 
 ## 7. 退出码
 
 | 码 | 含义 |
 | ---: | --- |
-| 0 | 成功；无期望可见性差异 |
-| 2 | 审计完成；存在期望差异 |
+| 0 | 成功；无期望可见性差异（plan-repair：预演可行） |
+| 2 | 审计完成；存在期望差异（plan-repair：预演不可行） |
 | 3 | 输入、路径、台账或参数错误 |
 | 4 | 未预期内部错误 |
 
-`doctor` 成功返回 0；`audit` 存在差异返回 2；`verify-ledger` 校验失败返回 3；`explain` 行不存在返回 3。
+`doctor` 成功返回 0；`audit` 存在差异返回 2；`verify-ledger` 校验失败返回 3；`explain` 行不存在返回 3；`plan-repair` 预演不可行返回 2。
 
-## 8. 确定性
+## 8. 修复预演（plan-repair）
+
+`plan-repair --workspace W [--snapshot S] [--scope entry|file] [--out DIR]` 输出 `repair_plan.json` 与 `repair_plan.md`。计划只是候选处置预演，不修改任何源文件。
+
+- **证据图**：只对 `applicable` 且无 `conflict_code` 的删除条目建立“条目 → 命中行”映射；命中判定与可见性计算共用同一套位置/等值语义。无效、过期、重复、孤儿、模式不符的条目进入 `excluded_entries`，不参与处置。
+- **动作**：`suspend_entry`（暂停指定 delete_file_id/ordinal）、`quarantine_file`（隔离整份删除文件，file scope）、`compensate_position`（为受影响但 `expected_visible=false` 的行建议新的精确位置删除；目标文件必须存在、位置必须在声明行数内、序列号取 `max(快照序列号, 目标数据序列号)` 以满足不过期）。
+- **预演**：每个候选计划在内存中重跑删除适用 → 可见性 → 对账。可行的充要条件：所有有效期望行达到预期可见性，且未列入期望的行可见性与基线一致。`EXTRA_EXPECTED_ROW`、未列入期望的行被波及、预演后仍不达标的期望行都会产生有证据的冲突，计划标记不可行。
+- **最小性**：同一 scope 下按“处置的已有删除条目数（file scope 为隔离文件数）、补偿条目数、稳定 file_id/ordinal 顺序”排序；可行时逐一移除每个动作（entry 为单条目、file 为整份文件）并重演，任一动作移除后仍可行则 `minimal=false`。
+- **确定性**：计划 JSON 键排序、固定缩进；摘要无论可行与否字节稳定；`plan_key` 由 scope、动作集合、快照、指纹与差异计数的内容哈希生成。
+- **引用**：`audit --repair-plan repair_plan.json` 校验 `workspace_fingerprint`、`snapshot_id`、`rule_version` 一致后，把计划摘要嵌入 `report.json`/`report.md`/`report.html` 与台账 `repair_plans` 表；不一致返回 `REPAIR_PLAN_MISMATCH`（退出码 3）。
+
+## 9. 确定性
 
 JSON 输出使用 `sort_keys=True`、固定缩进和 UTF-8；Markdown/HTML 表格按稳定排序；运行时间只来自 `--run-at`，默认 `2024-06-01T00:00:00Z`；不生成随机数；HTML 不引用 CDN、外部字体、脚本或网络资源。报告写入采用临时文件替换。

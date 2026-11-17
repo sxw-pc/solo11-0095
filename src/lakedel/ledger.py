@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS diff_summary (
   count INTEGER NOT NULL,
   PRIMARY KEY(run_key, classification)
 );
+CREATE TABLE IF NOT EXISTS repair_plans (
+  run_key TEXT NOT NULL REFERENCES runs(run_key) ON DELETE CASCADE,
+  plan_key TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  feasible INTEGER NOT NULL,
+  actions INTEGER NOT NULL,
+  compensations INTEGER NOT NULL,
+  residual_diffs INTEGER NOT NULL,
+  summary_json TEXT NOT NULL,
+  PRIMARY KEY(run_key, plan_key)
+);
 """
 
 
@@ -74,6 +85,7 @@ def write_ledger(
     db_path: str | Path,
     result: AuditResult,
     artifacts: list[dict[str, Any]],
+    repair_plan: dict[str, Any] | None = None,
 ) -> Path:
     db = Path(db_path)
     db.parent.mkdir(parents=True, exist_ok=True)
@@ -106,7 +118,8 @@ def write_ledger(
                     canonical_json(result.stats),
                 ),
             )
-            for table in ("artifacts", "findings", "row_visibility", "diff_summary"):
+            for table in ("artifacts", "findings", "row_visibility", "diff_summary",
+                          "repair_plans"):
                 connection.execute(f"DELETE FROM {table} WHERE run_key = ?", (result.run_key,))
             for artifact in artifacts:
                 path = Path(artifact["path"])
@@ -154,6 +167,23 @@ def write_ledger(
                 connection.execute(
                     "INSERT INTO diff_summary(run_key, classification, count) VALUES (?, ?, ?)",
                     (result.run_key, classification, count),
+                )
+            if repair_plan is not None:
+                connection.execute(
+                    """INSERT INTO repair_plans(run_key, plan_key, scope, feasible,
+                                               actions, compensations, residual_diffs,
+                                               summary_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        result.run_key,
+                        repair_plan["plan_key"],
+                        repair_plan["scope"],
+                        1 if repair_plan["feasible"] else 0,
+                        repair_plan["actions"],
+                        repair_plan["compensations"],
+                        repair_plan["residual_diffs"],
+                        canonical_json(repair_plan),
+                    ),
                 )
     finally:
         connection.close()

@@ -12,6 +12,7 @@ from .demo import run_demo
 from .engine import execute_audit
 from .errors import AuditError
 from .ledger import verify_ledger
+from .repair import SCOPES, plan_repair, write_plan
 from .service import produce_outputs
 from .util import FIXED_RUN_AT, pretty_json
 
@@ -69,7 +70,8 @@ def _audit(args: argparse.Namespace) -> int:
     out = Path(args.out)
     db = Path(args.db) if args.db else out / "ledger.sqlite"
     result, artifacts, ledger = produce_outputs(
-        args.workspace, out, formats, db, args.snapshot, args.run_at
+        args.workspace, out, formats, db, args.snapshot, args.run_at,
+        repair_plan_path=args.repair_plan,
     )
     print(f"snapshot: {result.workspace.snapshot.snapshot_id}")
     print(f"rows: {result.stats['rows']} visible={result.stats['visible_rows']} "
@@ -79,6 +81,28 @@ def _audit(args: argparse.Namespace) -> int:
     for artifact in artifacts:
         print(f"{artifact['format']}: {artifact['path']} {artifact['sha256']}")
     return 2 if result.stats["diffs"] else 0
+
+
+def _plan_repair(args: argparse.Namespace) -> int:
+    plan = plan_repair(args.workspace, args.snapshot, args.scope, args.run_at)
+    artifacts = write_plan(args.out, plan)
+    summary = plan["summary"]
+    print(f"snapshot: {plan['run']['snapshot_id']}")
+    print(f"scope: {summary['scope']} feasible: {summary['feasible']}")
+    print(
+        f"actions: {summary['actions']} "
+        f"(suspended={summary['suspended_entries']} "
+        f"quarantined={summary['quarantined_files']} "
+        f"compensations={summary['compensation_entries']})"
+    )
+    print(
+        f"residual_diffs: {summary['residual_diffs']} "
+        f"conflicts: {summary['conflicts']} minimal: {summary['minimal']}"
+    )
+    print(f"plan_key: {summary['plan_key']}")
+    for artifact in artifacts:
+        print(f"{artifact['format']}: {artifact['path']} {artifact['sha256']}")
+    return 0 if summary["feasible"] else 2
 
 
 def _explain(args: argparse.Namespace) -> int:
@@ -161,7 +185,16 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--db")
     audit.add_argument("--format", default="json,md,html")
     audit.add_argument("--run-at", default=FIXED_RUN_AT)
+    audit.add_argument("--repair-plan", help="可选：plan-repair 生成的 repair_plan.json，"
+                                             "校验上下文后嵌入报告与台账")
     audit.set_defaults(func=_audit)
+    plan = subs.add_parser("plan-repair", help="可见性差异的反事实修复预演（只输出计划）")
+    plan.add_argument("--workspace", default=DEFAULT_WORKSPACE)
+    plan.add_argument("--snapshot")
+    plan.add_argument("--scope", default="entry", choices=SCOPES)
+    plan.add_argument("--out", default="out/plan")
+    plan.add_argument("--run-at", default=FIXED_RUN_AT)
+    plan.set_defaults(func=_plan_repair)
     explain = subs.add_parser("explain", help="解释单行最终可见性")
     explain.add_argument("--workspace", default=DEFAULT_WORKSPACE)
     explain.add_argument("--snapshot")

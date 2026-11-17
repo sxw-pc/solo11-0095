@@ -17,12 +17,13 @@
 | `visibility_summary` | `reason_counts` 与按文件的 rows/visible/hidden |
 | `ledger_path` | 调用方传入的台账路径 |
 | `limitations` | 固定限制说明 |
+| `repair_plan` | 可选；`audit --repair-plan` 传入且校验通过时出现，含 `plan_key`、`scope`、`feasible`、`actions`、`compensations`、`residual_diffs`、`source` |
 
 `diffs` 每项含 `classification`、`file_id`、`row_pos`、`row_id`、`actual_visible`、`expected_visible`、`first_finding`、`decision_summary`。`decision_summary` 是 reason code 及命中来源的短摘要；完整链在台账 `row_visibility.decision_chain_json`。
 
 ## 2. Markdown 报告
 
-文件名 `report.md`，章节固定为：`# 行删镜审计报告`、`## 结论`、`## 统计`、`## 问题分类`、`## 差异样例`、`## 可见性摘要`、`## 限制说明`。表格按稳定键排序，差异样例最多 20 条；无差异时明确写“未发现差异。”。台账路径附在末尾。
+文件名 `report.md`，章节固定为：`# 行删镜审计报告`、`## 结论`、`## 统计`、`## 问题分类`、`## 差异样例`、`## 可见性摘要`、`## 限制说明`。表格按稳定键排序，差异样例最多 20 条；无差异时明确写“未发现差异。”。台账路径附在末尾。引用修复计划时在可见性摘要后追加 `## 修复预演计划` 小节。
 
 ## 3. HTML 报告
 
@@ -32,6 +33,7 @@
 - `id="findings"`：finding 分类表。
 - `id="diffs"`：差异样例。
 - `id="visibility"`：reason code 计数。
+- `id="repair-plan"`：可选；引用修复计划时出现。
 - `id="limitations"`：限制说明。
 
 动态内容全部 HTML 转义；页面无 JavaScript、无随机数。
@@ -86,9 +88,20 @@ CREATE TABLE diff_summary (
   count INTEGER NOT NULL,
   PRIMARY KEY(run_key, classification)
 );
+CREATE TABLE repair_plans (
+  run_key TEXT NOT NULL REFERENCES runs(run_key) ON DELETE CASCADE,
+  plan_key TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  feasible INTEGER NOT NULL,
+  actions INTEGER NOT NULL,
+  compensations INTEGER NOT NULL,
+  residual_diffs INTEGER NOT NULL,
+  summary_json TEXT NOT NULL,
+  PRIMARY KEY(run_key, plan_key)
+);
 ```
 
-`diff_summary` 写入四种分类及 `total`。`decision_chain_json` 是决定链数组，包含 `initial_visibility`、位置/等值命中、`stale_delete_ignored`、`final_visibility` 步骤。
+`diff_summary` 写入四种分类及 `total`。`decision_chain_json` 是决定链数组，包含 `initial_visibility`、位置/等值命中、`stale_delete_ignored`、`final_visibility` 步骤。`repair_plans` 仅在 `audit --repair-plan` 引用计划时写入一行，`summary_json` 是计划摘要的 canonical JSON。
 
 ## 5. verify-ledger
 

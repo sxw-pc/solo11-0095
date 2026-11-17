@@ -6,9 +6,9 @@
 
 ## 边界
 
-**是**：纯本地、离线、确定性可复现的删除可见性核验器；配置驱动、fixture 可替换；带 SQLite 台账、幂等重跑、差异对账、golden 回归。
+**是**：纯本地、离线、确定性可复现的删除可见性核验器；配置驱动、fixture 可替换；带 SQLite 台账、幂等重跑、差异对账、golden 回归；`plan-repair` 只做内存中的反事实预演并输出候选处置计划。
 
-**不是**：不是 Iceberg / Delta Lake / Hudi 读写实现；不是 SQL 查询引擎；不是修复或湖表维护工具；不做时间旅行、compaction、冷热分层、模式演进、分区裁剪、水位审计、SCD2、血缘或调度。
+**不是**：不是 Iceberg / Delta Lake / Hudi 读写实现；不是 SQL 查询引擎；不是修复或湖表维护工具（预演计划不写回任何源数据）；不做时间旅行、compaction、冷热分层、模式演进、分区裁剪、水位审计、SCD2、血缘或调度。
 
 它只回答：**在这个本地快照里，哪些行被正确删除、哪些行仍应可见、删除向量是否可信、某行为什么最终可见或不可见。**
 
@@ -19,12 +19,25 @@ python -m lakedel doctor --workspace examples/lake
 python -m lakedel audit --workspace examples/lake --out out/audit --format json,md,html
 python -m lakedel explain --workspace examples/lake --row-id R0004
 python -m lakedel explain --workspace examples/lake --file-id base_001 --row-pos 1
+python -m lakedel plan-repair --workspace examples/lake --scope entry --out out/plan
+python -m lakedel audit --workspace examples/lake --out out/audit --repair-plan out/plan/repair_plan.json
 python -m lakedel verify-ledger --db out/audit/ledger.sqlite
 python -m lakedel demo
 python -m unittest discover -s tests -v
 ```
 
 `demo` 在 `out/demo/` 生成 `report.json`、`report.md`、`report.html` 和 `ledger.sqlite`。示例包含 8 条删除向量 finding，但期望结果与语义计算结果一致，因此退出码为 `0`。存在期望差异时 `audit` 返回 `2`。
+
+## 修复预演（plan-repair）
+
+`plan-repair` 是**反事实修复预演**：当期望可见性与引擎计算不一致时，它只输出候选处置计划（`repair_plan.json` 与可读的 `repair_plan.md`），不修改任何数据文件、删除文件或期望文件。
+
+- 只对完整、可解析且可信（applicable 且无冲突）的删除条目建立“条目 → 命中行”证据图；无效、过期、重复、孤儿与模式不符的条目只列入排除清单，不会伪装成可撤证据。
+- `--scope entry` 暂停指定 `delete_file_id`/`ordinal` 条目；`--scope file` 隔离整份删除文件。两种 scope 都允许为受影响但 `expected_visible=false` 的行提出新的精确位置删除作为补偿，补偿遵守现有目标、schema 与序列号语义。
+- 计划在内存里重跑删除适用 → 可见性 → 对账：只有所有有效期望行达到预期、且未列入期望的行可见性不变时才标记 `feasible`；不可行时输出有证据的冲突集合，空方案不会被当作成功。
+- 同一 scope 下按“处置的已有删除条目数（file scope 为隔离文件数）、补偿条目数、稳定 file_id/ordinal 顺序”确定最小计划，并逐一移除动作验证必要性。
+- `audit --repair-plan <repair_plan.json>` 校验计划与当前 workspace 指纹、快照、规则版本一致后，把计划摘要嵌入报告与台账 `repair_plans` 表。
+- 退出码：可行 `0`，预演不可行 `2`，输入/参数错误 `3`，内部错误 `4`。
 
 ## Fixture 结构
 
@@ -68,8 +81,8 @@ examples/lake/
 
 | 码 | 含义 |
 | ---: | --- |
-| 0 | 成功，且没有期望可见性差异 |
-| 2 | 审计完成，但存在期望差异 |
+| 0 | 成功，且没有期望可见性差异（plan-repair：预演可行） |
+| 2 | 审计完成，但存在期望差异（plan-repair：预演不可行） |
 | 3 | 输入、路径或台账错误 |
 | 4 | 内部错误 |
 

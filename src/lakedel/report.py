@@ -26,11 +26,15 @@ LIMITATIONS = [
 REPORT_FILES = {"json": "report.json", "md": "report.md", "html": "report.html"}
 
 
-def build_report(result: AuditResult, ledger_path: str) -> dict[str, Any]:
+def build_report(
+    result: AuditResult,
+    ledger_path: str,
+    repair_plan: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     workspace = result.workspace
     findings = finding_dicts(result.findings)
     finding_counts = Counter(item.code for item in result.findings)
-    return {
+    report = {
         "project": {
             "name": "行删镜",
             "package": "lakedel",
@@ -69,6 +73,9 @@ def build_report(result: AuditResult, ledger_path: str) -> dict[str, Any]:
         "ledger_path": ledger_path,
         "limitations": list(LIMITATIONS),
     }
+    if repair_plan is not None:
+        report["repair_plan"] = repair_plan
+    return report
 
 
 def _cell(value: Any) -> str:
@@ -148,6 +155,22 @@ def render_markdown(report: dict[str, Any]) -> str:
     )
     for code, count in report["visibility_summary"]["reason_counts"].items():
         lines.append(f"| {_cell(code)} | {count} |")
+    plan = report.get("repair_plan")
+    if plan is not None:
+        lines.extend(
+            [
+                "",
+                "## 修复预演计划",
+                "",
+                "| 字段 | 值 |",
+                "| --- | --- |",
+            ]
+        )
+        for key in (
+            "plan_key", "scope", "feasible", "actions", "compensations",
+            "residual_diffs", "source",
+        ):
+            lines.append(f"| {key} | {_cell(plan[key])} |")
     lines.extend(["", "## 限制说明", ""])
     lines.extend(f"- {item}" for item in report["limitations"])
     lines.extend(["", f"台账：`{report['ledger_path']}`", ""])
@@ -199,6 +222,14 @@ def render_html(report: dict[str, Any]) -> str:
         for item in diffs[:20]
     ]
     reason_rows = [[code, count] for code, count in report["visibility_summary"]["reason_counts"].items()]
+    plan = report.get("repair_plan")
+    plan_rows = [
+        [key, plan[key]]
+        for key in (
+            "plan_key", "scope", "feasible", "actions", "compensations",
+            "residual_diffs", "source",
+        )
+    ] if plan is not None else []
     conclusion = (
         "未发现期望可见性差异。"
         if stats["diffs"] == 0
@@ -223,6 +254,10 @@ def render_html(report: dict[str, Any]) -> str:
         if diff_rows else "<p>未发现差异。</p>",
         "</section><section class=\"card\" id=\"visibility\"><h2>可见性摘要</h2>",
         _html_table(["reason_code", "行数"], reason_rows), "</section>",
+        (
+            "<section class=\"card\" id=\"repair-plan\"><h2>修复预演计划</h2>"
+            + _html_table(["字段", "值"], plan_rows) + "</section>"
+        ) if plan is not None else "",
         "<section class=\"card\" id=\"limitations\"><h2>限制说明</h2><ul>",
         "".join(f"<li>{html.escape(item)}</li>" for item in report["limitations"]),
         "</ul></section>",
@@ -238,10 +273,11 @@ def write_reports(
     result: AuditResult,
     formats: list[str],
     ledger_path: str,
+    repair_plan: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    report = build_report(result, ledger_path)
+    report = build_report(result, ledger_path, repair_plan)
     artifacts: list[dict[str, Any]] = []
     for fmt in sorted(set(formats)):
         if fmt == "json":
