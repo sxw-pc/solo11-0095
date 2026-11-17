@@ -86,6 +86,11 @@ def generate() -> None:
         "snapshot_id": "search_after", "documents": documents,
         "queries": [{"query_id": "repair_audit", "terms": ["repair", "audit"], "top_k": 2}],
         "query_budget": {"maximum_block_fetches": 2},
+        "score_contract": {
+            "idf": "ln((visible_N+1)/(visible_df+1))",
+            "tf": "tf/(tf+1)",
+            "tie_break": "row_id_ascending"
+        },
         "ranking_contracts": [
             {"name": "lexical", "required_regions": []},
             {"name": "regional", "required_regions": ["south"]},

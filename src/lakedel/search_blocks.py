@@ -117,6 +117,10 @@ def inspect_search_blocks(workspace: Path) -> dict[str, Any]:
     limit = catalog.get("query_budget", {}).get("maximum_block_fetches")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit < len(seen_paths):
         raise ValueError("query block budget is absent")
+    if catalog.get("score_contract") != {
+            "idf": "ln((visible_N+1)/(visible_df+1))",
+            "tf": "tf/(tf+1)", "tie_break": "row_id_ascending"}:
+        raise ValueError("unsupported search score contract")
     return {
         "run_key": audit.run_key, "snapshot_id": audit.workspace.snapshot.snapshot_id,
         "visible_count": len(visible), "visible_term_df": dict(sorted(term_df.items())),
