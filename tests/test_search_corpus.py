@@ -3,12 +3,20 @@ import unittest
 from pathlib import Path
 
 from lakedel.search_corpus import inspect_search_corpus
+from lakedel.search_blocks import inspect_search_blocks
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class SearchCorpusTest(unittest.TestCase):
+    def test_large_index_is_valid_but_has_no_rankings(self):
+        result = inspect_search_blocks(ROOT / "examples/search_lake")
+        self.assertEqual(result["visible_count"], 992)
+        self.assertEqual(result["visible_term_df"]["repair"], 1)
+        self.assertEqual(result["maximum_document_fetches"], 64)
+        self.assertIsNone(result["rankings"])
+
     def test_visible_corpus_uses_real_delete_audit(self):
         result = inspect_search_corpus(ROOT / "examples/lake",
                                        ROOT / "examples/lake/search_catalog.json")
