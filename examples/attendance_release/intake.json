@@ -1,0 +1,11 @@
+{
+  "snapshot_id": "snap_001",
+  "run_key": "f8fd267de00e57b08d07fe1ab53caed487daba214ec8a3ebe7b1cd8abbad5ed2",
+  "rows": ["local", "visiting"],
+  "columns": ["morning", "afternoon", "evening"],
+  "mask_below": 3,
+  "contracts": {
+    "margin_priority": "retain_all_row_and_column_totals",
+    "detail_priority": "retain_all_nonsensitive_cells"
+  }
+}
