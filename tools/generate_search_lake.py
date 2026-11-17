@@ -93,8 +93,11 @@ def generate() -> None:
     }
     write("search_catalog.json", payload(catalog))
     index_terms = {}
+    live_df = {}
     for term, blocks in sorted(postings.items()):
         index_terms[term] = []
+        live_df[term] = sum(1 for items in blocks.values() for item in items
+                            if int(item["row_id"][1:]) > 32)
         for block, items in sorted(blocks.items()):
             path = f"index/{term}/{block:02d}.json"
             write(path, payload(items))
@@ -107,7 +110,10 @@ def generate() -> None:
                                       "max_tf": max(item["tf"] for item in items),
                                       "max_tf_by_region": region_max,
                                       "path": path})
+    live_ids = [f"S{number:04d}" for number in range(33, 1025)]
     index = {"snapshot_id": "search_after", "block_size": 32,
+             "visible_term_df": live_df,
+             "visible_rows_sha256": hashlib.sha256(payload(live_ids).encode("utf-8")).hexdigest(),
              "postings": index_terms}
     write("search_blocks.json", payload(index))
 

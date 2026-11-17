@@ -56,6 +56,12 @@ def inspect_search_blocks(workspace: Path) -> dict[str, Any]:
             raise ValueError("catalog region differs from audited row")
     visible = {row.row_id for row, decision in zip(audit.workspace.rows, audit.decisions)
                if decision.visible}
+    from hashlib import sha256
+    from .util import canonical_json
+
+    visible_digest = sha256((canonical_json(sorted(visible)) + "\n").encode("utf-8")).hexdigest()
+    if index.get("visible_rows_sha256") != visible_digest:
+        raise ValueError("index visible-row digest differs from audit")
     postings = index.get("postings")
     if not isinstance(postings, dict):
         raise ValueError("search block directory is absent")
@@ -92,6 +98,8 @@ def inspect_search_blocks(workspace: Path) -> dict[str, Any]:
             if metadata.get("max_tf_by_region") != region_max:
                 raise ValueError("regional block upper bound mismatch")
         term_df[term] = len(seen_rows & visible)
+    if index.get("visible_term_df") != term_df:
+        raise ValueError("index active document frequency differs from audit")
     limit = catalog.get("query_budget", {}).get("maximum_block_fetches")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit < len(seen_paths):
         raise ValueError("query block budget is absent")
