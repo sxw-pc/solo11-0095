@@ -98,8 +98,14 @@ def generate() -> None:
         for block, items in sorted(blocks.items()):
             path = f"index/{term}/{block:02d}.json"
             write(path, payload(items))
+            region_max: dict[str, int] = {}
+            for item in items:
+                position = int(item["row_id"][1:]) - 1
+                region = regions[position % 4]
+                region_max[region] = max(region_max.get(region, 0), item["tf"])
             index_terms[term].append({"block": block,
                                       "max_tf": max(item["tf"] for item in items),
+                                      "max_tf_by_region": region_max,
                                       "path": path})
     index = {"snapshot_id": "search_after", "block_size": 32,
              "postings": index_terms}

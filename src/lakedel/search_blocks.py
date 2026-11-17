@@ -79,6 +79,7 @@ def inspect_search_blocks(workspace: Path) -> dict[str, Any]:
                 raise ValueError("empty posting block")
             if metadata.get("max_tf") != max(item.get("tf", -1) for item in items):
                 raise ValueError("block upper bound mismatch")
+            region_max: dict[str, int] = {}
             for item in items:
                 row_id, tf = item.get("row_id"), item.get("tf")
                 if (row_id not in positions or row_id in seen_rows
@@ -86,6 +87,10 @@ def inspect_search_blocks(workspace: Path) -> dict[str, Any]:
                         or isinstance(tf, bool) or not isinstance(tf, int) or tf <= 0):
                     raise ValueError("invalid posting")
                 seen_rows.add(row_id)
+                region = documents[positions[row_id]]["region"]
+                region_max[region] = max(region_max.get(region, 0), tf)
+            if metadata.get("max_tf_by_region") != region_max:
+                raise ValueError("regional block upper bound mismatch")
         term_df[term] = len(seen_rows & visible)
     limit = catalog.get("query_budget", {}).get("maximum_block_fetches")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit < len(seen_paths):
