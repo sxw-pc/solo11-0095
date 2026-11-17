@@ -58,7 +58,7 @@ def generate() -> None:
         terms = ["lake"]
         if pos < 32 or number == 999:
             terms.append("repair")
-        if number % 16 == 0:
+        if number % 16 == 0 or number == 702:
             terms.append("audit")
         if number == 700:
             terms.extend(["audit", "audit"])
