@@ -1,0 +1,18 @@
+{
+  "format_version": 1,
+  "table_id": "tbl_demo_001",
+  "table_name": "离线演示湖表",
+  "rule_version": "MOR-1.0",
+  "created_at": "2024-01-01T00:00:00Z",
+  "expected_visible": "expected/visible_snap_001.csv",
+  "schema": {
+    "columns": [
+      {"name": "_row_id", "type": "string", "nullable": false},
+      {"name": "_row_pos", "type": "long", "nullable": false},
+      {"name": "category", "type": "string", "nullable": false},
+      {"name": "region", "type": "string", "nullable": false},
+      {"name": "amount", "type": "long", "nullable": false},
+      {"name": "event_date", "type": "date", "nullable": true}
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+{"_row_id":"R0010","_row_pos":0,"category":"kappa","region":"west","amount":1000,"event_date":"2024-03-01"}
+{"_row_id":"R0011","_row_pos":1,"category":"lambda","region":"north","amount":1100,"event_date":"2024-03-02"}
+{"_row_id":"R0012","_row_pos":2,"category":"mu","region":"east","amount":1200,"event_date":"2024-03-03"}
+{"_row_id":"R0013","_row_pos":3,"category":"nu","region":"south","amount":1300,"event_date":"2024-03-04"}
+{"_row_id":"R0014","_row_pos":4,"category":"xi","region":"west","amount":1400,"event_date":"2024-03-05"}

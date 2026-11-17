@@ -1,0 +1,18 @@
+{
+  "created_at": "2024-06-01T06:00:00Z",
+  "data_files": [
+    {
+      "file_id": "base",
+      "format": "csv",
+      "path": "data/base.csv",
+      "row_count": 2,
+      "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97",
+      "sequence_number": 1,
+      "sha256": "a11d309c4c99d3965304830ce39ae06cf5ba436410b6eb4f885ea16232f87223"
+    }
+  ],
+  "delete_files": [],
+  "schema_hash": "53aefe07e99bbe0bb0cb464919345a24921e4240279d994747727daf1e55ff97",
+  "sequence_number": 1,
+  "snapshot_id": "snap_001"
+}

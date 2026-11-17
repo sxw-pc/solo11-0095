@@ -1,0 +1,10 @@
+{
+  "snapshot_id": "snap_001",
+  "inspections": [
+    {"row_id": "R0004", "defect": false},
+    {"row_id": "R0007", "defect": true},
+    {"row_id": "R0008", "defect": false},
+    {"row_id": "R0010", "defect": false},
+    {"row_id": "R0011", "defect": false}
+  ]
+}
