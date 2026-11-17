@@ -1,0 +1,21 @@
+{
+  "cost_guard": {
+    "common_period_1": {"grid": 4, "diesel": 2},
+    "normal_later": [{"grid": 3, "diesel": 0}, {"grid": 2, "diesel": 0}],
+    "outage_later": [{"grid": 1, "diesel": 2}, {"grid": 3, "diesel": 2}],
+    "worst_cost": 63, "worst_emissions": 79
+  },
+  "carbon_guard": {
+    "common_period_1": {"grid": 3, "diesel": 3},
+    "normal_later": [{"grid": 0, "diesel": 0}, {"grid": 5, "diesel": 0}],
+    "outage_later": [{"grid": 1, "diesel": 3}, {"grid": 3, "diesel": 1}],
+    "worst_cost": 69, "worst_emissions": 77
+  },
+  "all_first_stage_exact_suffix_bounds": [
+    {"grid": 4, "diesel": 2, "minimum_worst_cost": 63, "minimum_worst_emissions": 78},
+    {"grid": 4, "diesel": 1, "minimum_worst_cost": 64, "minimum_worst_emissions": 84},
+    {"grid": 3, "diesel": 3, "minimum_worst_cost": 68, "minimum_worst_emissions": 77},
+    {"grid": 3, "diesel": 2, "minimum_worst_cost": 69, "minimum_worst_emissions": 83},
+    {"grid": 2, "diesel": 3, "minimum_worst_cost": 74, "minimum_worst_emissions": 82}
+  ]
+}

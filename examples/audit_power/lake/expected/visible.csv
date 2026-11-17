@@ -1,0 +1,3 @@
+file_id,row_pos,_row_id,expected_visible
+base,0,R0001,true
+base,1,R0002,true
