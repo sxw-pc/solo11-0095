@@ -20,11 +20,16 @@ def produce_outputs(
     snapshot_id: str | None = None,
     run_at: str = FIXED_RUN_AT,
     ledger_label: str | None = None,
+    view: str = "publish",
 ) -> tuple[AuditResult, list[dict[str, Any]], Path]:
     result = execute_audit(workspace, snapshot_id, run_at)
     ledger = Path(db_path)
     artifacts = write_reports(
-        out_dir, result, formats, str(ledger) if ledger_label is None else ledger_label
+        out_dir,
+        result,
+        formats,
+        str(ledger) if ledger_label is None else ledger_label,
+        view,
     )
-    write_ledger(ledger, result, artifacts)
+    write_ledger(ledger, result, artifacts, view)
     return result, artifacts, ledger

@@ -25,6 +25,13 @@
 
 异常场景：`ORPHAN_DELETE_TARGET`、`OUT_OF_RANGE_POSITION`、`DUPLICATE_POSITION_DELETE`、`STALE_SEQUENCE`、`EQUALITY_NO_MATCH`、`DUPLICATE_EQUALITY_DELETE`、`DELETE_SCHEMA_MISMATCH`、`AMBIGUOUS_EQUALITY_COLUMNS`。
 
+完整性分层有独立隔离 fixture（`tests/fixtures/`）：
+
+| fixture | 场景 |
+| --- | --- |
+| `integrity_delete` | 可信位置删除命中 A；受损等值删除同时命中 A、B。A 为 `certain_hidden`，B 为 `indeterminate`；发布失败、调查可暂列 |
+| `integrity_data` | 数据文件哈希不符；其行即使有可信位置命中也为 `indeterminate`，可信文件的行保持确定态 |
+
 测试还会临时构造路径逃逸、哈希不一致、行数不一致、非法类型、空行、重复行、期望差异、台账篡改等临时 fixture，不污染仓库样例。
 
 ## 3. 新增一个小 fixture

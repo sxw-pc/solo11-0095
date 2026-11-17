@@ -1,0 +1,48 @@
+{
+  "snapshot_id": "snap_integrity",
+  "sequence_number": 3,
+  "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c",
+  "created_at": "2024-07-01T00:00:00Z",
+  "data_files": [
+    {
+      "file_id": "base_a",
+      "path": "data/base_a.csv",
+      "format": "csv",
+      "row_count": 2,
+      "sha256": "fbf7a69089e859c1f8db829d3a16336b4e22ea4c408a0eda86df4a7aa04a6fe0",
+      "sequence_number": 1,
+      "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c"
+    },
+    {
+      "file_id": "base_c",
+      "path": "data/base_c.csv",
+      "format": "csv",
+      "row_count": 1,
+      "sha256": "eaa097625c444a5bc75d86f17de0361bc3b8833087eff9341359a6023f7fede3",
+      "sequence_number": 3,
+      "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c"
+    }
+  ],
+  "delete_files": [
+    {
+      "file_id": "pos_trusted",
+      "path": "deletes/pos_trusted.jsonl",
+      "delete_kind": "position",
+      "sequence_number": 2,
+      "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c",
+      "sha256": "3678e618a3054c5945048be011795473d7c5c2c11ac2e4a5bec38faec832f863",
+      "target_file_id": "base_a"
+    },
+    {
+      "file_id": "eq_damaged",
+      "path": "deletes/eq_damaged.jsonl",
+      "delete_kind": "equality",
+      "sequence_number": 2,
+      "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c",
+      "sha256": "0eef443843f3b2af49d60a042ee8fa12517643afb14e095e41d9ab02cac20951",
+      "equality_columns": [
+        "region"
+      ]
+    }
+  ]
+}

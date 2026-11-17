@@ -1,0 +1,4 @@
+file_id,row_pos,_row_id,expected_visible
+bad,0,X,false
+bad,1,Y,true
+good,0,Z,false

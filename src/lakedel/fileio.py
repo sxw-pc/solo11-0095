@@ -9,9 +9,38 @@ from pathlib import Path
 from typing import Any
 
 from .errors import AuditError, Finding, finding
-from .models import Column, DataFileSpec, RowRecord, TableSchema
+from .models import (
+    Column,
+    DataFileSpec,
+    RowRecord,
+    SourceIntegrity,
+    TableSchema,
+)
 from .schema import coerce_value
 from .util import require_file, safe_join, sha256_file
+
+
+def data_integrity(
+    root: Path, specs: tuple[DataFileSpec, ...]
+) -> tuple[SourceIntegrity, ...]:
+    """按清单声明校验数据文件字节，不修复、不改写任何输入。"""
+    result: list[SourceIntegrity] = []
+    for spec in sorted(specs, key=lambda item: item.file_id):
+        path = require_file(safe_join(root, spec.path), spec.path)
+        actual = sha256_file(path)
+        mismatch = actual != spec.sha256
+        result.append(
+            SourceIntegrity(
+                "data",
+                spec.file_id,
+                spec.path,
+                spec.sha256,
+                actual,
+                not mismatch,
+                mismatch,
+            )
+        )
+    return tuple(result)
 
 
 def _header_check(
@@ -48,6 +77,7 @@ def _build_row(
     line: int,
     findings: list[Finding],
     check_missing: bool,
+    integrity: SourceIntegrity,
 ) -> RowRecord | None:
     pos_column = schema.column("_row_pos")
     assert pos_column is not None
@@ -104,11 +134,24 @@ def _build_row(
             finding("INVALID_VALUE", "_row_id 必须是字符串", spec.path, row_pos, {})
         )
         row_id = None
-    return RowRecord(spec.file_id, row_pos, row_id, values, spec.path)
+    return RowRecord(
+        spec.file_id,
+        row_pos,
+        row_id,
+        values,
+        spec.path,
+        integrity.trusted,
+        integrity.actual_sha256,
+        integrity.declared_sha256,
+    )
 
 
 def _read_csv(
-    spec: DataFileSpec, path: Path, schema: TableSchema, findings: list[Finding]
+    spec: DataFileSpec,
+    path: Path,
+    schema: TableSchema,
+    findings: list[Finding],
+    integrity: SourceIntegrity,
 ) -> list[RowRecord]:
     try:
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -145,7 +188,7 @@ def _read_csv(
                 )
             )
         raw = dict(zip(header, record))
-        row = _build_row(spec, raw, present, schema, offset, findings, False)
+        row = _build_row(spec, raw, present, schema, offset, findings, False, integrity)
         if row is None:
             continue
         if row.row_pos in seen:
@@ -169,7 +212,11 @@ def _read_csv(
 
 
 def _read_jsonl(
-    spec: DataFileSpec, path: Path, schema: TableSchema, findings: list[Finding]
+    spec: DataFileSpec,
+    path: Path,
+    schema: TableSchema,
+    findings: list[Finding],
+    integrity: SourceIntegrity,
 ) -> list[RowRecord]:
     try:
         text = path.read_text(encoding="utf-8")
@@ -200,7 +247,7 @@ def _read_jsonl(
             findings.append(
                 finding("EXTRA_COLUMN", "JSONL 行包含未知字段", spec.path, line_no, {"column": name})
             )
-        row = _build_row(spec, raw, present, schema, line_no, findings, True)
+        row = _build_row(spec, raw, present, schema, line_no, findings, True, integrity)
         if row is None:
             continue
         if row.row_pos in seen:
@@ -224,28 +271,41 @@ def _read_jsonl(
 
 
 def read_data_files(
-    root: Path, specs: tuple[DataFileSpec, ...], schema: TableSchema
+    root: Path,
+    specs: tuple[DataFileSpec, ...],
+    schema: TableSchema,
+    integrity: tuple[SourceIntegrity, ...] | None = None,
 ) -> tuple[tuple[RowRecord, ...], list[Finding]]:
+    """读取数据文件；完整性状态随行传递，供证明链区分可信与可疑证据。"""
     findings: list[Finding] = []
     rows: list[RowRecord] = []
     seen_ids: dict[str, tuple[str, int]] = {}
+    integrity_by_file = {
+        item.file_id: item
+        for item in (integrity if integrity is not None else data_integrity(root, specs))
+    }
     for spec in sorted(specs, key=lambda item: item.file_id):
         path = require_file(safe_join(root, spec.path), spec.path)
-        actual_sha = sha256_file(path)
-        if actual_sha != spec.sha256:
+        state = integrity_by_file[spec.file_id]
+        if state.mismatch:
             findings.append(
                 finding(
                     "FILE_HASH_MISMATCH",
                     "数据文件 sha256 与清单不一致",
                     spec.path,
                     None,
-                    {"declared": spec.sha256, "actual": actual_sha},
+                    {
+                        "declared": spec.sha256,
+                        "actual": state.actual_sha256,
+                        "trusted": False,
+                        "impact": "row_identity_untrusted",
+                    },
                 )
             )
         if spec.format == "csv":
-            file_rows = _read_csv(spec, path, schema, findings)
+            file_rows = _read_csv(spec, path, schema, findings, state)
         else:
-            file_rows = _read_jsonl(spec, path, schema, findings)
+            file_rows = _read_jsonl(spec, path, schema, findings, state)
         for row in file_rows:
             if row.row_id is not None:
                 if row.row_id in seen_ids:

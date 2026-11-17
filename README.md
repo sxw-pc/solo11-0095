@@ -10,13 +10,14 @@
 
 **不是**：不是 Iceberg / Delta Lake / Hudi 读写实现；不是 SQL 查询引擎；不是修复或湖表维护工具；不做时间旅行、compaction、冷热分层、模式演进、分区裁剪、水位审计、SCD2、血缘或调度。
 
-它只回答：**在这个本地快照里，哪些行被正确删除、哪些行仍应可见、删除向量是否可信、某行为什么最终可见或不可见。**
+它只回答：**在这个本地快照里，哪些行被正确删除、哪些行仍应可见、删除向量是否可信、某行为什么最终可见或不可见。** 当输入文件哈希与清单不符时，它还会回答：**哪些结论有可信证据、哪些只能待核定。**
 
 ## 快速上手
 
 ```bash
 python -m lakedel doctor --workspace examples/lake
 python -m lakedel audit --workspace examples/lake --out out/audit --format json,md,html
+python -m lakedel audit --workspace examples/lake --out out/probe --view investigate
 python -m lakedel explain --workspace examples/lake --row-id R0004
 python -m lakedel explain --workspace examples/lake --file-id base_001 --row-pos 1
 python -m lakedel verify-ledger --db out/audit/ledger.sqlite
@@ -54,26 +55,42 @@ examples/lake/
 - 孤儿目标、越界位置、重复位置/等值键、无匹配键、模式哈希不一致、等值列不可用的删除保留在审计记录中，不参与可见性计算。重复位置删除的第一条合法条目仍可生效，后续重复条目被忽略。
 - 等值删除键按 schema 类型规范化后比较；删除文件的 schema 哈希不一致时整文件不应用，防止错误列语义污染结果。
 
-完整规则与例子见 `docs/DELETE_SEMANTICS.md`。
+### 完整性分层
+
+数据文件或删除文件的实际 SHA 与清单不符时，工具不修复文件、不修改输入，而是把内容降级为**调查证据**：
+
+- 每行给出 `certain_visible`、`certain_hidden`、`indeterminate` 三态。可信位置/等值删除的任一有效命中足以证明 `certain_hidden`；可信数据行存在且所有可能适用的可信与不可信删除都被排除才是 `certain_visible`；其余为 `indeterminate`。
+- 数据文件不可信时，解析出的 `_row_id` 与等值键不能作为确定身份，该行连同其上删除命中一起降级。
+- 同一受损删除文件涉及的多行共享来源证据（`untrusted_sources` / `untrusted_equality_rows`），不会被当作每行独立可控的可靠删除。
+- 暂定布尔结果仍按当前可解析内容计算，只在调查视图中展示。
+
+两种明确授权用途：
+
+| 用途 | 命令 | 结论 |
+| --- | --- | --- |
+| 发布核验 | `audit`（默认 `--view publish`） | 仅当每个 expected 行的确定态与期望一致且无 `indeterminate` 时才 `publishable=true`；否则退出码 2 |
+| 调查视图 | `audit --view investigate`、`explain` | 允许列出暂定布尔结果，同时显示可信区间与来源，永远不标记为可发布 |
+
+完整规则与例子见 `docs/DELETE_SEMANTICS.md`、`docs/INTEGRITY.md`。
 
 ## 报告与台账
 
 - `report.json`：项目/规则版本、快照摘要、统计、finding、差异明细、可见性摘要、台账路径。键排序稳定。
 - `report.md`：结论、统计表、问题分类表、差异样例、可见性摘要、限制说明。
 - `report.html`：无 CDN、无外部字体/脚本、样式内联的自包含页面。
-- `ledger.sqlite`：`runs`、`artifacts`、`findings`、`row_visibility`、`diff_summary`。`run_key` 由 workspace 指纹、快照 ID 与规则版本生成，相同输入重跑不会重复插入 run。
+- `ledger.sqlite`：`runs`、`artifacts`、`findings`、`row_visibility`（含三态、可信/可疑命中、可信区间）、`source_integrity`、`outcome`、`diff_summary`。`run_key` 由 workspace 指纹、快照 ID 与规则版本生成，相同输入重跑不会重复插入 run。
 - `explain` 输出该行的初始可见性、位置/等值命中、过期忽略项、最终可见性与 reason code。
 
 ## 退出码
 
 | 码 | 含义 |
 | ---: | --- |
-| 0 | 成功，且没有期望可见性差异 |
-| 2 | 审计完成，但存在期望差异 |
+| 0 | 成功；发布核验可发布，或调查视图已完成 |
+| 2 | 发布核验未通过（期望差异或存在待核定行） |
 | 3 | 输入、路径或台账错误 |
 | 4 | 内部错误 |
 
-finding 是审计观察；只有 fixture 对账差异会改变 `audit` 的退出码。台账校验失败返回 `3`。
+finding 是审计观察；发布核验下，fixture 对账差异或 `indeterminate` 行都会使 `audit` 返回 `2`。`--view investigate` 只用于调查展示，暂定结果不触发发布级退出码。台账校验失败返回 `3`。
 
 ## 已知限制
 

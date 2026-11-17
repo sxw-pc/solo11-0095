@@ -77,7 +77,7 @@ CSV 首行为表头，必须含 `_row_pos`，可选 `_row_id`，其余列对应 
 | `UNKNOWN_DELETE_KIND` | error | 未知删除类型 |
 | `SCHEMA_HASH_MISMATCH` | error | 快照/数据文件模式哈希不一致 |
 | `DELETE_SCHEMA_MISMATCH` | error | 删除文件模式哈希不一致，整文件不应用 |
-| `FILE_HASH_MISMATCH` | error | 文件 sha256 与清单不一致 |
+| `FILE_HASH_MISMATCH` | error | 文件 sha256 与清单不一致；内容降级为调查证据 |
 | `ROW_COUNT_MISMATCH` | error | 数据文件行数与清单不一致 |
 | `MISSING_COLUMN` | error | 数据/期望文件缺少列或字段 |
 | `EXTRA_COLUMN` | error | 数据/期望文件出现未知列或字段 |
@@ -105,16 +105,18 @@ CSV 首行为表头，必须含 `_row_pos`，可选 `_row_id`，其余列对应 
 | `LEDGER_CHECK_FAILED` | error | 台账缺失、损坏或校验失败 |
 | `CLI_USAGE` | error | 命令行参数非法 |
 
+完整性分层产生的逐行三态不是 finding：它写入报告的 `certainty_summary`/`row_visibility` 与台账，并决定发布核验是否通过。详见 `docs/INTEGRITY.md`。
+
 ## 7. 退出码
 
 | 码 | 含义 |
 | ---: | --- |
 | 0 | 成功；无期望可见性差异 |
-| 2 | 审计完成；存在期望差异 |
+| 2 | 发布核验未通过：存在期望差异或待核定行 |
 | 3 | 输入、路径、台账或参数错误 |
 | 4 | 未预期内部错误 |
 
-`doctor` 成功返回 0；`audit` 存在差异返回 2；`verify-ledger` 校验失败返回 3；`explain` 行不存在返回 3。
+`doctor` 成功返回 0；`audit` 在发布核验下存在差异或待核定行返回 2，`--view investigate` 返回 0；`verify-ledger` 校验失败返回 3；`explain` 行不存在返回 3。
 
 ## 8. 确定性
 

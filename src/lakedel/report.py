@@ -12,10 +12,11 @@ from . import __version__
 from .errors import finding_dicts
 from .models import AuditResult
 from .util import atomic_write_text, sha256_text
-from .visibility import visibility_by_file
+from .visibility import certainty_by_file, certainty_counts, visibility_by_file
 
 LIMITATIONS = [
     "只支持本项目定义的本地 CSV/JSONL fixture 与 JSON 清单，不读取 Parquet、ORC 或真实湖表。",
+    "输入文件哈希不符时不修复、不改写文件；受损内容仅作调查证据，相关行降级为待核定。",
     "不实现 Iceberg、Delta Lake、Hudi 的协议、快照时间旅行、compaction 或模式演进。",
     "不会修改任何数据文件或删除文件；所有建议均为说明性输出。",
     "类型系统仅覆盖 string、long、date，完成最小格式校验，不做数据库级类型强制。",
@@ -26,10 +27,73 @@ LIMITATIONS = [
 REPORT_FILES = {"json": "report.json", "md": "report.md", "html": "report.html"}
 
 
-def build_report(result: AuditResult, ledger_path: str) -> dict[str, Any]:
+def _row_visibility(decisions: tuple[Any, ...]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in decisions:
+        rows.append(
+            {
+                "file_id": item.file_id,
+                "row_pos": item.row_pos,
+                "row_id": item.row_id,
+                "visible": item.visible,
+                "provisional_visible": item.visible,
+                "certainty": item.certainty,
+                "certain_visible": item.certain_visible,
+                "certain_hidden": item.certain_hidden,
+                "indeterminate": item.indeterminate,
+                "trusted_position_hits": list(item.trusted_position_hits),
+                "trusted_equality_hits": list(item.trusted_equality_hits),
+                "suspect_position_hits": list(item.suspect_position_hits),
+                "suspect_equality_hits": list(item.suspect_equality_hits),
+                "untrusted_sources": list(item.untrusted_sources),
+                "untrusted_equality_sources": list(item.untrusted_equality_ids),
+                "untrusted_equality_rows": [
+                    list(pair) for pair in item.untrusted_equality_rows
+                ],
+                "trusted_interval": (
+                    [False, True]
+                    if item.indeterminate
+                    else [item.certain_visible, item.certain_visible]
+                ),
+                "row_identity_trusted": item.row_identity_trusted,
+                "reason_code": item.reason_code,
+                "decision_chain": list(item.chain),
+            }
+        )
+    return rows
+
+
+def build_report(
+    result: AuditResult, ledger_path: str, view: str = "publish"
+) -> dict[str, Any]:
     workspace = result.workspace
     findings = finding_dicts(result.findings)
     finding_counts = Counter(item.code for item in result.findings)
+    integrity = {
+        "data_files": [item.to_dict() for item in workspace.data_integrity],
+        "delete_files": [item.to_dict() for item in result.delete_integrity],
+        "data_trusted": all(item.trusted for item in workspace.data_integrity),
+        "delete_trusted": all(item.trusted for item in result.delete_integrity),
+    }
+    certainty = certainty_counts(result.decisions)
+    outcome = (
+        result.outcome.to_dict()
+        if result.outcome is not None
+        else {
+            "publishable": False,
+            "publish_reason": "NOT_PUBLISHABLE_INDETERMINATE",
+            "blockers": [],
+            "indeterminate_rows": [],
+            "expected_mismatches": [],
+        }
+    )
+    conclusion = dict(outcome)
+    conclusion["authorized_use"] = view
+    conclusion["provisional_allowed"] = view == "investigate"
+    # 调查视图可以列暂定结果，但永远不能标记为可发布。
+    conclusion["publishable"] = bool(outcome["publishable"]) and view == "publish"
+    if view != "publish":
+        conclusion["publish_reason"] = "INVESTIGATION_ONLY"
     return {
         "project": {
             "name": "行删镜",
@@ -65,7 +129,20 @@ def build_report(result: AuditResult, ledger_path: str) -> dict[str, Any]:
         "visibility_summary": {
             "reason_counts": dict(result.reason_counts),
             "by_file": visibility_by_file(result.decisions),
+            "certainty_by_file": certainty_by_file(result.decisions),
         },
+        "certainty_summary": {
+            **certainty,
+            "conserved": (
+                certainty["certain_visible"]
+                + certainty["certain_hidden"]
+                + certainty["indeterminate"]
+                == certainty["rows"]
+            ),
+        },
+        "integrity": integrity,
+        "conclusion": conclusion,
+        "row_visibility": _row_visibility(result.decisions),
         "ledger_path": ledger_path,
         "limitations": list(LIMITATIONS),
     }
@@ -73,6 +150,64 @@ def build_report(result: AuditResult, ledger_path: str) -> dict[str, Any]:
 
 def _cell(value: Any) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def _publish_banner(report: dict[str, Any]) -> str:
+    conclusion = report["conclusion"]
+    if conclusion["authorized_use"] != "publish":
+        return (
+            "调查视图：以下布尔结果仅为基于当前可解析内容的暂定值，"
+            "不可标记为可发布，必须结合可信区间与来源人工复核。"
+        )
+    if conclusion["publishable"]:
+        return "发布核验：全部确定态与期望一致且无待核定行，结果可发布。"
+    reasons = ", ".join(conclusion["blockers"]) or conclusion["publish_reason"]
+    return f"发布核验：不可发布，存在待核定或确定差异（{reasons}）。"
+
+
+def _certainty_table(report: dict[str, Any]) -> list[str]:
+    certainty = report["certainty_summary"]
+    lines = [
+        "",
+        "## 三态与暂定结果",
+        "",
+        "| 指标 | 值 |",
+        "| --- | ---: |",
+        f"| certain_visible | {certainty['certain_visible']} |",
+        f"| certain_hidden | {certainty['certain_hidden']} |",
+        f"| indeterminate | {certainty['indeterminate']} |",
+        f"| provisional_visible | {certainty['provisional_visible']} |",
+        f"| provisional_hidden | {certainty['provisional_hidden']} |",
+        f"| conserved | {str(certainty['conserved']).lower()} |",
+    ]
+    pending = [item for item in report["row_visibility"] if item["indeterminate"]]
+    lines.extend(["", "### 待核定行", ""])
+    if pending:
+        lines.extend(
+            [
+                "| file_id | row_pos | 暂定可见 | 可信区间 | 可疑来源 | 可信命中 |",
+                "| --- | ---: | --- | --- | --- | --- |",
+            ]
+        )
+        for item in pending[:20]:
+            lines.append(
+                f"| {_cell(item['file_id'])} | {item['row_pos']} | "
+                f"{item['provisional_visible']} | "
+                f"{item['trusted_interval'][0]}..{item['trusted_interval'][1]} | "
+                f"{_cell(','.join(item['untrusted_sources']) or '-')} | "
+                f"{_cell(','.join(item['trusted_position_hits'] + item['trusted_equality_hits']) or '-')} |"
+            )
+    else:
+        lines.append("无待核定行。")
+    lines.extend(["", "## 来源完整性", "", "| 类型 | file_id | 状态 | 声明 SHA | 实际 SHA |", "| --- | --- | --- | --- | --- |"])
+    sources = report["integrity"]["data_files"] + report["integrity"]["delete_files"]
+    for item in sources:
+        lines.append(
+            f"| {_cell(item['source_kind'])} | {_cell(item['file_id'])} | "
+            f"{_cell(item['status'])} | {_cell(item['declared_sha256'] or '-')} | "
+            f"{_cell(item['actual_sha256'])} |"
+        )
+    return lines
 
 
 def render_markdown(report: dict[str, Any]) -> str:
@@ -103,6 +238,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "rows", "visible_rows", "hidden_rows", "findings", "diffs",
     ):
         lines.append(f"| {key} | {stats[key]} |")
+    lines.extend(['', _publish_banner(report)])
+    lines.extend(_certainty_table(report))
     lines.extend(
         [
             "",
@@ -204,6 +341,28 @@ def render_html(report: dict[str, Any]) -> str:
         if stats["diffs"] == 0
         else f"发现 {stats['diffs']} 处期望可见性差异，需要人工复核。"
     )
+    banner = _publish_banner(report)
+    certainty = report["certainty_summary"]
+    certainty_rows = [
+        ["certain_visible", certainty["certain_visible"]],
+        ["certain_hidden", certainty["certain_hidden"]],
+        ["indeterminate", certainty["indeterminate"]],
+        ["provisional_visible", certainty["provisional_visible"]],
+        ["provisional_hidden", certainty["provisional_hidden"]],
+        ["conserved", str(certainty["conserved"]).lower()],
+    ]
+    pending_rows = [
+        [item["file_id"], item["row_pos"], item["provisional_visible"],
+         f"{item['trusted_interval'][0]}..{item['trusted_interval'][1]}",
+         ", ".join(item["untrusted_equality_sources"]) or "-",
+         ", ".join(item["trusted_position_hits"] + item["trusted_equality_hits"]) or "-"]
+        for item in report["row_visibility"] if item["indeterminate"]
+    ][:20]
+    source_rows = [
+        [item["source_kind"], item["file_id"], item["status"],
+         item["declared_sha256"] or "-", item["actual_sha256"]]
+        for item in report["integrity"]["data_files"] + report["integrity"]["delete_files"]
+    ]
     parts = [
         "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">",
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
@@ -213,8 +372,20 @@ def render_html(report: dict[str, Any]) -> str:
         f"<p class=\"muted\">表 {html.escape(snapshot['table_name'])} / 快照 "
         f"{html.escape(snapshot['snapshot_id'])} / 规则 {html.escape(report['project']['rule_version'])}</p>",
         f"<section class=\"card\" id=\"summary\"><h2>结论</h2><p>{html.escape(conclusion)}</p>",
+        f"<p class=\"warning\">{html.escape(banner)}</p>",
         f"<p>工作区指纹 <code>{html.escape(report['run']['workspace_fingerprint'])}</code></p>",
         _html_table(["指标", "值"], stat_rows), "</section>",
+        "<section class=\"card\" id=\"certainty\"><h2>三态与暂定结果</h2>",
+        _html_table(["指标", "值"], certainty_rows),
+        "<h3>待核定行</h3>",
+        _html_table(
+            ["file_id", "row_pos", "暂定可见", "可信区间", "可疑来源", "可信命中"],
+            pending_rows,
+        ) if pending_rows else "<p>无待核定行。</p>",
+        "</section>",
+        "<section class=\"card\" id=\"integrity\"><h2>来源完整性</h2>",
+        _html_table(["类型", "file_id", "状态", "声明 SHA", "实际 SHA"], source_rows),
+        "</section>",
         "<section class=\"card\" id=\"findings\"><h2>问题分类</h2>",
         _html_table(["错误码", "级别", "文件", "行", "说明"], finding_rows)
         if finding_rows else "<p>无 finding。</p>",
@@ -238,10 +409,11 @@ def write_reports(
     result: AuditResult,
     formats: list[str],
     ledger_path: str,
+    view: str = "publish",
 ) -> list[dict[str, Any]]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    report = build_report(result, ledger_path)
+    report = build_report(result, ledger_path, view)
     artifacts: list[dict[str, Any]] = []
     for fmt in sorted(set(formats)):
         if fmt == "json":

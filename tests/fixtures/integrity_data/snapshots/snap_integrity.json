@@ -1,0 +1,36 @@
+{
+  "snapshot_id": "snap_integrity",
+  "sequence_number": 3,
+  "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c",
+  "created_at": "2024-07-01T00:00:00Z",
+  "data_files": [
+    {
+      "file_id": "bad",
+      "path": "data/bad.csv",
+      "format": "csv",
+      "row_count": 2,
+      "sha256": "d4b71c321139f28d6cec01d9a68004cf9baa8c39fac729f2743eb0eefc381fe9",
+      "sequence_number": 1,
+      "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c"
+    },
+    {
+      "file_id": "good",
+      "path": "data/good.csv",
+      "format": "csv",
+      "row_count": 1,
+      "sha256": "ad4883bd057ff14e9414da022fd05fc59eb2ff369999a698dabe8e329ec5b418",
+      "sequence_number": 1,
+      "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c"
+    }
+  ],
+  "delete_files": [
+    {
+      "file_id": "pos_trusted",
+      "path": "deletes/pos_trusted.jsonl",
+      "delete_kind": "position",
+      "sequence_number": 2,
+      "schema_hash": "d5dbbc783b519f48e0271afbccf83826db13fbe5c3bcdbcace06326feb6fd06c",
+      "sha256": "40ece21a00bcc4860f86a9689da659ba18ca06ca3d1e1ba5d69a8214d56b9728"
+    }
+  ]
+}

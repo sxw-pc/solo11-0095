@@ -6,7 +6,13 @@ import csv
 from pathlib import Path
 
 from .errors import Finding, finding
-from .models import DiffRecord, ExpectedRow, RowDecision, RowRecord
+from .models import (
+    DiffRecord,
+    ExpectedRow,
+    ReconciliationOutcome,
+    RowDecision,
+    RowRecord,
+)
 
 DIFF_CODES = (
     "MISSING_VISIBLE",
@@ -107,6 +113,7 @@ def reconcile(
     expected: tuple[ExpectedRow, ...],
     findings: list[Finding],
 ) -> tuple[tuple[DiffRecord, ...], dict[str, int]]:
+    """按暂定布尔结果对账，保留原有四分类语义。"""
     expected_map = {(item.file_id, item.row_pos): item for item in expected}
     data_map = {(item.file_id, item.row_pos): item for item in rows}
     decision_map = {item.key: item for item in decisions}
@@ -124,6 +131,10 @@ def reconcile(
             )
         if not classification:
             continue
+        if decision.indeterminate:
+            classification_certainty = "indeterminate"
+        else:
+            classification_certainty = decision.certainty
         related = _first_related(row.file_id, row.row_pos, findings)
         diff = DiffRecord(
             classification,
@@ -146,6 +157,9 @@ def reconcile(
                     "actual_visible": decision.visible,
                     "expected_visible": diff.expected_visible,
                     "reason_code": decision.reason_code,
+                    "certainty": classification_certainty,
+                    "trusted_hits": list(decision.trusted_hits),
+                    "suspect_hits": list(decision.suspect_hits),
                 },
             )
         )
@@ -179,3 +193,77 @@ def reconcile(
         summary[item.classification] += 1
     summary["total"] = len(diffs)
     return tuple(diffs), summary
+
+
+def reconcile_certainty(
+    rows: tuple[RowRecord, ...],
+    decisions: tuple[RowDecision, ...],
+    expected: tuple[ExpectedRow, ...],
+    diffs: tuple[DiffRecord, ...],
+    data_trusted: bool,
+    delete_trusted: bool,
+) -> ReconciliationOutcome:
+    """发布核验：只有全部 expected 行的确定态与期望一致且无待核定才可发布。
+
+    调查视图不受此限制，仍可展示暂定布尔结果，但必须标注可信区间与来源。
+    """
+    expected_map = {(item.file_id, item.row_pos): item for item in expected}
+    decision_map = {item.key: item for item in decisions}
+    data_map = {(item.file_id, item.row_pos): item for item in rows}
+    blockers: list[str] = []
+    indeterminate_rows: list[tuple[str, int]] = []
+    mismatches: list[tuple[str, int]] = []
+    if not data_trusted:
+        blockers.append("UNTRUSTED_DATA_FILE")
+    if not delete_trusted:
+        blockers.append("UNTRUSTED_DELETE_FILE")
+    for decision in decisions:
+        if not decision.indeterminate:
+            continue
+        indeterminate_rows.append(decision.key)
+        if not decision.row_identity_trusted:
+            code = "INDETERMINATE_DATA_SOURCE"
+        else:
+            code = "INDETERMINATE_DELETE_SOURCE"
+        if code not in blockers:
+            blockers.append(code)
+    for expected_row in expected:
+        key = (expected_row.file_id, expected_row.row_pos)
+        decision = decision_map.get(key)
+        if key not in data_map or decision is None:
+            mismatches.append(key)
+            continue
+        if decision.indeterminate:
+            continue
+        if decision.certainty == "certain_visible" and expected_row.visible:
+            continue
+        if decision.certainty == "certain_hidden" and not expected_row.visible:
+            continue
+        mismatches.append(key)
+    for diff in diffs:
+        key = (diff.file_id, diff.row_pos)
+        if diff.classification in ("EXTRA_EXPECTED_ROW", "MISSING_EXPECTED_ROW"):
+            if key not in mismatches:
+                mismatches.append(key)
+            continue
+        decision = decision_map.get(key)
+        if decision is None or decision.indeterminate:
+            continue
+        if key not in mismatches:
+            mismatches.append(key)
+    certain_visible = sum(1 for item in decisions if item.certain_visible)
+    certain_hidden = sum(1 for item in decisions if item.certain_hidden)
+    indeterminate = sum(1 for item in decisions if item.indeterminate)
+    provisional_visible = sum(1 for item in decisions if item.visible)
+    publishable = not blockers and not indeterminate_rows and not mismatches
+    return ReconciliationOutcome(
+        publishable,
+        tuple(blockers),
+        tuple(sorted(set(indeterminate_rows))),
+        tuple(sorted(set(mismatches))),
+        provisional_visible,
+        len(decisions) - provisional_visible,
+        certain_visible,
+        certain_hidden,
+        indeterminate,
+    )

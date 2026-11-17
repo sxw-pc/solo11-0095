@@ -49,9 +49,44 @@ CREATE TABLE IF NOT EXISTS row_visibility (
   row_pos INTEGER NOT NULL,
   row_id TEXT,
   visible INTEGER NOT NULL,
+  provisional_visible INTEGER NOT NULL DEFAULT 0,
+  certainty TEXT NOT NULL DEFAULT 'certain_visible',
+  certain_visible INTEGER NOT NULL DEFAULT 0,
+  certain_hidden INTEGER NOT NULL DEFAULT 0,
+  indeterminate INTEGER NOT NULL DEFAULT 0,
+  trusted_hits_json TEXT NOT NULL DEFAULT '[]',
+  suspect_hits_json TEXT NOT NULL DEFAULT '[]',
+  untrusted_sources_json TEXT NOT NULL DEFAULT '[]',
+  trusted_interval_json TEXT NOT NULL DEFAULT '[false,false]',
+  row_identity_trusted INTEGER NOT NULL DEFAULT 1,
   reason_code TEXT NOT NULL,
   decision_chain_json TEXT NOT NULL,
   PRIMARY KEY(run_key, file_id, row_pos)
+);
+CREATE TABLE IF NOT EXISTS source_integrity (
+  run_key TEXT NOT NULL REFERENCES runs(run_key) ON DELETE CASCADE,
+  source_kind TEXT NOT NULL,
+  file_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  declared_sha256 TEXT,
+  actual_sha256 TEXT NOT NULL,
+  trusted INTEGER NOT NULL,
+  mismatch INTEGER NOT NULL,
+  PRIMARY KEY(run_key, source_kind, file_id)
+);
+CREATE TABLE IF NOT EXISTS outcome (
+  run_key TEXT PRIMARY KEY REFERENCES runs(run_key) ON DELETE CASCADE,
+  view TEXT NOT NULL,
+  publishable INTEGER NOT NULL,
+  publish_reason TEXT NOT NULL,
+  blockers_json TEXT NOT NULL,
+  indeterminate_rows_json TEXT NOT NULL,
+  expected_mismatches_json TEXT NOT NULL,
+  provisional_visible INTEGER NOT NULL,
+  provisional_hidden INTEGER NOT NULL,
+  certain_visible INTEGER NOT NULL,
+  certain_hidden INTEGER NOT NULL,
+  indeterminate INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS diff_summary (
   run_key TEXT NOT NULL REFERENCES runs(run_key) ON DELETE CASCADE,
@@ -74,6 +109,7 @@ def write_ledger(
     db_path: str | Path,
     result: AuditResult,
     artifacts: list[dict[str, Any]],
+    view: str = "publish",
 ) -> Path:
     db = Path(db_path)
     db.parent.mkdir(parents=True, exist_ok=True)
@@ -106,7 +142,10 @@ def write_ledger(
                     canonical_json(result.stats),
                 ),
             )
-            for table in ("artifacts", "findings", "row_visibility", "diff_summary"):
+            for table in (
+                "artifacts", "findings", "row_visibility", "diff_summary",
+                "source_integrity", "outcome",
+            ):
                 connection.execute(f"DELETE FROM {table} WHERE run_key = ?", (result.run_key,))
             for artifact in artifacts:
                 path = Path(artifact["path"])
@@ -137,15 +176,34 @@ def write_ledger(
                 )
             for decision in result.decisions:
                 connection.execute(
-                    """INSERT INTO row_visibility(run_key, file_id, row_pos, row_id,
-                                                  visible, reason_code, decision_chain_json)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    """INSERT INTO row_visibility(
+                           run_key, file_id, row_pos, row_id, visible,
+                           provisional_visible, certainty, certain_visible,
+                           certain_hidden, indeterminate, trusted_hits_json,
+                           suspect_hits_json, untrusted_sources_json,
+                           trusted_interval_json, row_identity_trusted,
+                           reason_code, decision_chain_json)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         result.run_key,
                         decision.file_id,
                         decision.row_pos,
                         decision.row_id,
                         1 if decision.visible else 0,
+                        1 if decision.visible else 0,
+                        decision.certainty,
+                        1 if decision.certain_visible else 0,
+                        1 if decision.certain_hidden else 0,
+                        1 if decision.indeterminate else 0,
+                        canonical_json(list(decision.trusted_hits)),
+                        canonical_json(list(decision.suspect_hits)),
+                        canonical_json(list(decision.untrusted_sources)),
+                        canonical_json(
+                            [False, True]
+                            if decision.indeterminate
+                            else [decision.certain_visible, decision.certain_visible]
+                        ),
+                        1 if decision.row_identity_trusted else 0,
                         decision.reason_code,
                         canonical_json(list(decision.chain)),
                     ),
@@ -154,6 +212,50 @@ def write_ledger(
                 connection.execute(
                     "INSERT INTO diff_summary(run_key, classification, count) VALUES (?, ?, ?)",
                     (result.run_key, classification, count),
+                )
+            sources = result.workspace.data_integrity + result.delete_integrity
+            for source in sources:
+                connection.execute(
+                    """INSERT INTO source_integrity(
+                           run_key, source_kind, file_id, path, declared_sha256,
+                           actual_sha256, trusted, mismatch)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        result.run_key,
+                        source.source_kind,
+                        source.file_id,
+                        source.path,
+                        source.declared_sha256,
+                        source.actual_sha256,
+                        1 if source.trusted else 0,
+                        1 if source.mismatch else 0,
+                    ),
+                )
+            if result.outcome is not None:
+                outcome = result.outcome
+                publishable = outcome.publishable and view == "publish"
+                reason = outcome.publish_reason if view == "publish" else "INVESTIGATION_ONLY"
+                connection.execute(
+                    """INSERT INTO outcome(
+                           run_key, view, publishable, publish_reason, blockers_json,
+                           indeterminate_rows_json, expected_mismatches_json,
+                           provisional_visible, provisional_hidden,
+                           certain_visible, certain_hidden, indeterminate)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        result.run_key,
+                        view,
+                        1 if publishable else 0,
+                        reason,
+                        canonical_json(list(outcome.blockers)),
+                        canonical_json([list(pair) for pair in outcome.indeterminate_rows]),
+                        canonical_json([list(pair) for pair in outcome.expected_mismatches]),
+                        outcome.provisional_visible,
+                        outcome.provisional_hidden,
+                        outcome.certain_visible,
+                        outcome.certain_hidden,
+                        outcome.indeterminate,
+                    ),
                 )
     finally:
         connection.close()
@@ -180,7 +282,10 @@ def verify_ledger(db_path: str | Path) -> dict[str, Any]:
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
         }
-        required = {"runs", "artifacts", "findings", "row_visibility", "diff_summary"}
+        required = {
+            "runs", "artifacts", "findings", "row_visibility", "diff_summary",
+            "source_integrity", "outcome",
+        }
         checks.append(_check("tables", required <= table_names, ",".join(sorted(required))))
         fk = list(connection.execute("PRAGMA foreign_key_check"))
         checks.append(_check("foreign_keys", not fk, f"{len(fk)} violation(s)"))
@@ -216,8 +321,15 @@ def _verify_run(connection: sqlite3.Connection, run: sqlite3.Row) -> list[dict[s
     except json.JSONDecodeError:
         return [_check(f"run:{key}:stats_json", False, "invalid JSON")]
     rows = connection.execute(
-        "SELECT COUNT(*) n, COALESCE(SUM(visible),0) v FROM row_visibility WHERE run_key=?",
+        """SELECT COUNT(*) n, COALESCE(SUM(visible),0) v,
+                  COALESCE(SUM(certain_visible),0) cv,
+                  COALESCE(SUM(certain_hidden),0) ch,
+                  COALESCE(SUM(indeterminate),0) ind
+           FROM row_visibility WHERE run_key=?""",
         (key,),
+    ).fetchone()
+    outcome = connection.execute(
+        "SELECT * FROM outcome WHERE run_key=?", (key,)
     ).fetchone()
     findings = connection.execute(
         "SELECT COUNT(*) n FROM findings WHERE run_key=?", (key,)
@@ -248,6 +360,12 @@ def _verify_run(connection: sqlite3.Connection, run: sqlite3.Row) -> list[dict[s
         _check(
             f"run:{key}:diffs", diff_total == stats.get("diffs"), f"{diff_total}",
         ),
+        _check(
+            f"run:{key}:certainty_conserved",
+            rows["cv"] + rows["ch"] + rows["ind"] == rows["n"],
+            f"{rows['cv']}+{rows['ch']}+{rows['ind']}/{rows['n']}",
+        ),
+        _check(f"run:{key}:outcome", outcome is not None, "present"),
     ]
     artifacts = list(
         connection.execute(

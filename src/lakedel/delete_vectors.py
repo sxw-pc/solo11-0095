@@ -14,7 +14,14 @@ from .delete_rules import (
     position_operation,
 )
 from .errors import Finding, finding
-from .models import DataFileSpec, DeleteFileSpec, DeleteOperation, RowRecord, TableSchema
+from .models import (
+    DataFileSpec,
+    DeleteFileSpec,
+    DeleteOperation,
+    RowRecord,
+    SourceIntegrity,
+    TableSchema,
+)
 from .util import canonical_json, require_file, safe_join, sha256_file
 
 
@@ -53,15 +60,34 @@ def _spec_integrity(
     schema: TableSchema,
     data_by_id: dict[str, DataFileSpec],
     findings: list[Finding],
-) -> tuple[Path, SpecState]:
+) -> tuple[Path, SpecState, SourceIntegrity]:
     path = require_file(safe_join(root, spec.path), spec.path)
-    if spec.sha256 is not None:
-        actual = sha256_file(path)
-        if actual != spec.sha256:
-            findings.append(
-                finding("FILE_HASH_MISMATCH", "删除文件 sha256 与清单不一致", spec.path,
-                        None, {"declared": spec.sha256, "actual": actual})
+    actual = sha256_file(path)
+    mismatch = spec.sha256 is not None and actual != spec.sha256
+    if mismatch:
+        findings.append(
+            finding(
+                "FILE_HASH_MISMATCH",
+                "删除文件 sha256 与清单不一致",
+                spec.path,
+                None,
+                {
+                    "declared": spec.sha256,
+                    "actual": actual,
+                    "trusted": False,
+                    "impact": "delete_evidence_untrusted",
+                },
             )
+        )
+    integrity = SourceIntegrity(
+        "delete",
+        spec.file_id,
+        spec.path,
+        spec.sha256,
+        actual,
+        not mismatch,
+        mismatch,
+    )
     schema_ok = spec.schema_hash == schema.schema_hash
     if not schema_ok:
         findings.append(
@@ -97,7 +123,7 @@ def _spec_integrity(
                         None, {"delete_sequence": spec.sequence_number,
                                "data_sequence": target_spec.sequence_number})
             )
-    return path, SpecState(schema_ok, columns_ok, target_ok, stale)
+    return path, SpecState(schema_ok, columns_ok, target_ok, stale), integrity
 
 
 def load_delete_vectors(
@@ -106,6 +132,7 @@ def load_delete_vectors(
     schema: TableSchema,
     data_specs: tuple[DataFileSpec, ...],
     rows: tuple[RowRecord, ...],
+    integrity_out: list[SourceIntegrity] | None = None,
 ) -> tuple[tuple[DeleteOperation, ...], list[Finding]]:
     findings: list[Finding] = []
     operations: list[DeleteOperation] = []
@@ -113,7 +140,11 @@ def load_delete_vectors(
     sequences = {item.file_id: item.sequence_number for item in data_specs}
     seen_positions: set[tuple[str, int]] = set()
     for spec in sorted(specs, key=lambda item: item.file_id):
-        path, state = _spec_integrity(root, spec, schema, data_by_id, findings)
+        path, state, integrity = _spec_integrity(
+            root, spec, schema, data_by_id, findings
+        )
+        if integrity_out is not None:
+            integrity_out.append(integrity)
         seen_equality: set[str] = set()
         for line_no, entry in _read_entries(spec, path, findings):
             reason = entry.get("reason", "")
@@ -125,13 +156,26 @@ def load_delete_vectors(
                     seen_positions, findings,
                 )
                 if op is not None:
-                    operations.append(op)
+                    operations.append(
+                        replace(
+                            op,
+                            source_trusted=integrity.trusted,
+                            source_actual_sha256=integrity.actual_sha256,
+                            source_declared_sha256=integrity.declared_sha256,
+                        )
+                    )
                 continue
             op, normalized = equality_operation(
                 spec, entry, line_no, reason, schema, state, findings
             )
             if op is None:
                 continue
+            op = replace(
+                op,
+                source_trusted=integrity.trusted,
+                source_actual_sha256=integrity.actual_sha256,
+                source_declared_sha256=integrity.declared_sha256,
+            )
             if normalized is not None and not op.conflict_code:
                 marker = canonical_json(normalized)
                 if marker in seen_equality:

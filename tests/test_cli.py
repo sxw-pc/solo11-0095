@@ -102,6 +102,61 @@ class CliTests(unittest.TestCase):
             self.assertIn("行删镜演示审计完成", proc.stdout)
             self.assertTrue((Path(tmp) / "demo" / "report.html").is_file())
 
+    def test_integrity_publish_vs_investigate(self):
+        fixture = ROOT / "tests" / "fixtures" / "integrity_delete"
+        with tempfile.TemporaryDirectory() as tmp:
+            publish_out = Path(tmp) / "publish"
+            code, output, _ = invoke([
+                "audit", "--workspace", str(fixture), "--out", str(publish_out),
+                "--format", "json",
+            ])
+            self.assertEqual(code, 2, output)
+            self.assertIn("publishable=false", output)
+            report = json.loads((publish_out / "report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["conclusion"]["authorized_use"], "publish")
+            self.assertFalse(report["conclusion"]["publishable"])
+            self.assertEqual(
+                report["conclusion"]["indeterminate_rows"], [["base_a", 1]]
+            )
+
+            probe_out = Path(tmp) / "investigate"
+            code, output, _ = invoke([
+                "audit", "--workspace", str(fixture), "--out", str(probe_out),
+                "--format", "json", "--view", "investigate",
+            ])
+            self.assertEqual(code, 0, output)
+            self.assertIn("view: investigate", output)
+            report = json.loads((probe_out / "report.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["conclusion"]["authorized_use"], "investigate")
+            self.assertFalse(report["conclusion"]["publishable"])
+            rows = {
+                (item["file_id"], item["row_pos"]): item for item in report["row_visibility"]
+            }
+            self.assertFalse(rows[("base_a", 1)]["provisional_visible"])
+            self.assertTrue(rows[("base_a", 1)]["indeterminate"])
+
+    def test_explain_reports_certainty_and_trusted_interval(self):
+        fixture = ROOT / "tests" / "fixtures" / "integrity_delete"
+        code, output, _ = invoke([
+            "explain", "--workspace", str(fixture), "--file-id", "base_a", "--row-pos", "1"
+        ])
+        self.assertEqual(code, 0)
+        payload = json.loads(output)
+        self.assertEqual(payload["certainty"], "indeterminate")
+        self.assertEqual(payload["trusted_interval"], [False, True])
+        self.assertEqual(payload["untrusted_equality_sources"], ["eq_damaged"])
+        self.assertFalse(payload["publishable_row"])
+        self.assertFalse(payload["provisional_visible"])
+
+    def test_doctor_reports_certainty_without_breaking_old_fixture(self):
+        code, output, _ = invoke(["doctor", "--workspace", str(LAKE), "--json"])
+        payload = json.loads(output)
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["certain_visible"], 8)
+        self.assertEqual(payload["certain_hidden"], 6)
+        self.assertEqual(payload["indeterminate"], 0)
+        self.assertTrue(payload["publishable"])
+
     def test_no_command_prints_help(self):
         code, output, _ = invoke([])
         self.assertEqual(code, 0)

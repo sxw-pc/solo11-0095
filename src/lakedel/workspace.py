@@ -6,7 +6,7 @@ import hashlib
 from pathlib import Path
 
 from .errors import AuditError, Finding, finding
-from .fileio import read_data_files
+from .fileio import data_integrity, read_data_files
 from .manifest import parse_snapshot, parse_table
 from .models import Snapshot, WorkspaceData
 from .reconcile import load_expected
@@ -112,8 +112,9 @@ def load_workspace(
         safe_join(root, table.expected_visible), table.expected_visible
     )
     expected = load_expected(expected_path, findings)
+    integrity = data_integrity(root, selected.data_files)
     rows, row_findings = read_data_files(
-        root, selected.data_files, table.schema
+        root, selected.data_files, table.schema, integrity
     )
     findings.extend(row_findings)
     fingerprint = _fingerprint(root, table_path, selected, expected_path)
@@ -127,4 +128,5 @@ def load_workspace(
         expected_path,
         fingerprint,
         findings,
+        integrity,
     )

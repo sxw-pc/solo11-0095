@@ -47,6 +47,10 @@ def _doctor(args: argparse.Namespace) -> int:
         "warnings": len(warnings),
         "warning_codes": sorted({item.code for item in warnings}),
         "workspace_fingerprint": result.workspace.fingerprint,
+        "certain_visible": sum(1 for item in result.decisions if item.certain_visible),
+        "certain_hidden": sum(1 for item in result.decisions if item.certain_hidden),
+        "indeterminate": sum(1 for item in result.decisions if item.indeterminate),
+        "publishable": bool(result.outcome and result.outcome.publishable),
     }
     if args.json:
         print(pretty_json(payload), end="")
@@ -61,6 +65,12 @@ def _doctor(args: argparse.Namespace) -> int:
         print(f"findings: {payload['findings']} (warnings={payload['warnings']})")
         codes = ", ".join(payload["warning_codes"]) or "none"
         print(f"warning_codes: {codes}")
+        print(
+            f"certainty: certain_visible={payload['certain_visible']} "
+            f"certain_hidden={payload['certain_hidden']} "
+            f"indeterminate={payload['indeterminate']}"
+        )
+        print(f"publishable: {str(payload['publishable']).lower()}")
     return 0
 
 
@@ -69,16 +79,37 @@ def _audit(args: argparse.Namespace) -> int:
     out = Path(args.out)
     db = Path(args.db) if args.db else out / "ledger.sqlite"
     result, artifacts, ledger = produce_outputs(
-        args.workspace, out, formats, db, args.snapshot, args.run_at
+        args.workspace, out, formats, db, args.snapshot, args.run_at,
+        view=args.view,
     )
+    outcome = result.outcome
     print(f"snapshot: {result.workspace.snapshot.snapshot_id}")
     print(f"rows: {result.stats['rows']} visible={result.stats['visible_rows']} "
           f"hidden={result.stats['hidden_rows']}")
     print(f"findings: {result.stats['findings']} diffs: {result.stats['diffs']}")
+    if outcome is not None:
+        print(
+            f"certainty: certain_visible={outcome.certain_visible} "
+            f"certain_hidden={outcome.certain_hidden} "
+            f"indeterminate={outcome.indeterminate}"
+        )
+        publishable = outcome.publishable and args.view == "publish"
+        print(
+            f"view: {args.view} publishable={str(publishable).lower()} "
+            f"reason={outcome.publish_reason if args.view == 'publish' else 'INVESTIGATION_ONLY'}"
+        )
     print(f"ledger: {ledger}")
     for artifact in artifacts:
         print(f"{artifact['format']}: {artifact['path']} {artifact['sha256']}")
-    return 2 if result.stats["diffs"] else 0
+    if args.view != "publish":
+        # 调查视图的暂定结果不是发布结论，不触发发布级差异退出码。
+        return 0
+    if result.stats["diffs"]:
+        return 2
+    if outcome is not None and not outcome.publishable:
+        # 有确定差异或待核定行时发布核验不能通过。
+        return 2
+    return 0
 
 
 def _explain(args: argparse.Namespace) -> int:
@@ -114,10 +145,31 @@ def _explain(args: argparse.Namespace) -> int:
             "row_id": decision.row_id,
         },
         "visible": decision.visible,
+        "provisional_visible": decision.visible,
+        "certainty": decision.certainty,
+        "certain_visible": decision.certain_visible,
+        "certain_hidden": decision.certain_hidden,
+        "indeterminate": decision.indeterminate,
+        "trusted_interval": list(
+            [False, True]
+            if decision.indeterminate
+            else [decision.certain_visible, decision.certain_visible]
+        ),
         "reason_code": decision.reason_code,
         "position_hits": list(decision.position_hits),
         "equality_hits": list(decision.equality_hits),
         "stale_hits": list(decision.stale_hits),
+        "trusted_position_hits": list(decision.trusted_position_hits),
+        "trusted_equality_hits": list(decision.trusted_equality_hits),
+        "suspect_position_hits": list(decision.suspect_position_hits),
+        "suspect_equality_hits": list(decision.suspect_equality_hits),
+        "untrusted_sources": list(decision.untrusted_sources),
+        "untrusted_equality_sources": list(decision.untrusted_equality_ids),
+        "untrusted_equality_rows": [
+            list(pair) for pair in decision.untrusted_equality_rows
+        ],
+        "row_identity_trusted": decision.row_identity_trusted,
+        "publishable_row": not decision.indeterminate,
         "decision_chain": list(decision.chain),
         "related_findings": related,
     }
@@ -161,6 +213,12 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--db")
     audit.add_argument("--format", default="json,md,html")
     audit.add_argument("--run-at", default=FIXED_RUN_AT)
+    audit.add_argument(
+        "--view",
+        choices=("publish", "investigate"),
+        default="publish",
+        help="publish：发布核验，仅确定态可发布；investigate：调查视图，允许暂定结果",
+    )
     audit.set_defaults(func=_audit)
     explain = subs.add_parser("explain", help="解释单行最终可见性")
     explain.add_argument("--workspace", default=DEFAULT_WORKSPACE)
