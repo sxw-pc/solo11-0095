@@ -26,13 +26,14 @@ python -m unittest discover -s tests -v
 
 ## 删除后质检抽样证据样例
 
-隔离的 `examples/quality_transfer` 包含同一批 40 行的删除前后审计快照。`draw.json` 固定删除前在 east、west 各无放回抽 10 行，并给出人工质检结果；删除后，位置删除文件隐藏 east 的 5 条未抽中行。只读入口核对两次审计、样本身份、删除策略和剩余可见总体，暂不签发总体缺陷上界或发布结论：
+隔离的 `examples/quality_transfer` 包含同一批 40 行的删除前后审计快照。`draw.json` 固定删除前在 east、west 各无放回抽 10 行，并给出人工质检结果；删除后，位置删除文件隐藏 east 的 5 条未抽中行。只读入口核对两次审计、样本身份、删除策略和剩余可见总体，并按两份事前合同决定当前可见总体（east 15、west 20，共 35 行）是否取得质量发布证书：
 
 ```bash
 PYTHONPATH=src python -B -m lakedel.cohort_transfer --root examples/quality_transfer --draw examples/quality_transfer/draw.json
+PYTHONPATH=src python -B -m lakedel.cohort_transfer --root examples/quality_transfer --draw examples/quality_transfer/draw.json --quality-threshold 0.2
 ```
 
-输出绑定两次审计的 `run_key`，报告删除前后分层行数和已检行数；`population_upper_bounds` 与 `publication_decision` 保持 `null`，留给后续质量发布流程。
+两份合同的质量门槛均为当前可见总体缺陷率单侧 95% 上界不超过 25%（可用 `--quality-threshold` 收紧）。`unconditional_portable` 把删除前固定随机设计的无条件覆盖保证保守携带到只删不增的 after 总体：每个原 region 分配 α=0.025（整体至少 95% 同时覆盖），按有限总体无放回超几何精确反演各层缺陷数上界（零缺陷样本下 east、west 各 4 条），仅在有收据确认已删缺陷时扣减；合成上界 8/35≈22.86% 通过 25% 门槛，签发绑定 before/after `run_key`、当前总体与逐层 N/n/x 及尾概率见证的证书（收紧到 20% 则阻断）。`fresh_current_draw` 要求当前可见集合形成后再随机抽样；fixture 的 20 条收据都发生在删除之前，即使全部幸存也不满足该证据时点承诺，故暂缓并指出需重抽，而不是误报为质量不达标。任何新增行、幸存行内容变化、审计 error/diff、抽样身份或删除声明失配都会拒绝签发并给出证据原因；相同输入重放输出字节稳定。
 
 ## 删除请求履约样例
 
