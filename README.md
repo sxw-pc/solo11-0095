@@ -75,6 +75,27 @@ examples/lake/
 - `ledger.sqlite`：`runs`、`artifacts`、`findings`、`row_visibility`、`diff_summary`。`run_key` 由 workspace 指纹、快照 ID 与规则版本生成，相同输入重跑不会重复插入 run。
 - `explain` 输出该行的初始可见性、位置/等值命中、过期忽略项、最终可见性与 reason code。
 
+## 审计批次供电预案
+
+隔离的 `examples/audit_power/` 以一个两行快照演示"已对账审计行 → 三时段双场景供电合同"：
+
+```bash
+python -m lakedel.audit_power_intake --fixture examples/audit_power/intake.json
+```
+
+审计结果为 2 行，`energy_per_audited_row=1`，因此 `normal` 需求为 `[4,3,4]`，`outage` 需求为 `[4,6,4]`。第一时段的场景尚未揭晓，grid/diesel 采购必须两个场景共用；第一时段后揭晓，后两时段各自补救。电池状态为上一状态 + 购电 − 需求，恒在 `0..capacity`，初始 1，末时段至少 1。
+
+工具签发两份独立合同：
+
+| 合同 | 目标 | 最优首时段 | 最坏成本 | 最坏排放 | 约束 |
+| --- | --- | --- | --- | --- | --- |
+| `cost_guard` | 最小化两场景最大货币成本 | grid=4, diesel=2 | 63 | 79 | ≤ 65 |
+| `carbon_guard` | 最小化两场景最大排放 | grid=3, diesel=3 | 69 | 77 | ≤ 78 |
+
+两者结论相反：最省钱的首时段并非最干净，且同一首时段按成本求得的最优后续不一定排放最小。输出同时携带可离线复核的最优性证书：枚举全部可行首决策，并给出每个首决策下两场景针对成本/排放分别重新优化后的精确后缀下界（`all_first_stage_exact_suffix_bounds`）。对 `(4,2)`，最坏成本下界为 63，但那是在成本最优后续上实现的；该后续的实际最坏排放是 79，而 78 只是同一首时段改用排放最优后续时的下界——证书把两者分开保存。`examples/audit_power/witness.json` 是可行见证，仅供测试交叉核对，优化器从不读取它。
+
+源湖表或删除向量改变审计行数、`run_key` 或 `diffs` 时，供电需求、可行域与两份合同都会重算；对账不一致或 `diffs != 0` 时拒绝签发。供电上限为 3 场景、4 时段、各时段 0..8 单位电量。
+
 ## 退出码
 
 | 码 | 含义 |

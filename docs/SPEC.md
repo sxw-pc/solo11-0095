@@ -116,6 +116,25 @@ CSV 首行为表头，必须含 `_row_pos`，可选 `_row_id`，其余列对应 
 
 `doctor` 成功返回 0；`audit` 存在差异返回 2；`verify-ledger` 校验失败返回 3；`explain` 行不存在返回 3。
 
-## 8. 确定性
+## 8. 审计批次供电合同
+
+`lakedel.audit_power_intake` 把已经对账的审计批次转换为双场景、三时段（最多 4 时段）供电合同。入口 `main --fixture <intake.json>` 先执行 `execute_audit`，核对 `snapshot_id`、`run_key`，要求 `diffs == 0`，再用 `stats["rows"]` 计算需求：
+
+```text
+demand[s][t] = base_load[s][t] + audited_rows * energy_per_audited_row
+```
+
+约束：
+
+- 场景最多 3 个，时段最多 4 个，各时段 grid/diesel 购电量均在 `0..8`。
+- 首时段 `grid`/`diesel` 为两场景共用的非前知决策；`revealed_after_period` 必须为 1，之后两分支可独立补救。
+- 各时段 `grid <= grid_max[s][t]`，`diesel <= diesel_max_each_period`。
+- 电池 `battery[t] = battery[t-1] + grid + diesel - demand[s][t]`，始终在 `0..capacity`；`battery[-1] >= final_reserve`。
+- 每个场景必须覆盖全期需求，否则该首决策不可行；所有首决策都不可行时两份合同均拒签。
+- 成本/排放率与容量必须为非负整数；两份合同的 `objective` 与上限字段必须齐全。
+
+优化是精确的：枚举全部可行首决策，对每个场景后缀在电池状态上做有界动态规划。`certificate.all_first_stage_exact_suffix_bounds` 给出每个可行首决策针对成本/排放分别重新优化后缀后的最坏值，可用于离线复核。合同选择先最小化目标，再按首时段 `grid`、`diesel`、各场景补救向量稳定破平手。注意按成本求得的最优后缀不一定同时排放最小，证书分别保存 `minimum_worst_emissions`（下界）与 `cost_optimised_worst_emissions`（实际值），二者不可混用。
+
+## 9. 确定性
 
 JSON 输出使用 `sort_keys=True`、固定缩进和 UTF-8；Markdown/HTML 表格按稳定排序；运行时间只来自 `--run-at`，默认 `2024-06-01T00:00:00Z`；不生成随机数；HTML 不引用 CDN、外部字体、脚本或网络资源。报告写入采用临时文件替换。
