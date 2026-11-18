@@ -8,3 +8,6 @@ __pycache__/
 .benchmarks/
 .env
 dist/
+
+# 本地事故台账运行产物
+.incident/
