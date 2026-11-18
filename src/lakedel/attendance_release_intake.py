@@ -1,4 +1,9 @@
-"""Naive small-cell mask for deletion-aware synthetic attendance rows."""
+"""Deletion-aware synthetic attendance disclosure intake.
+
+naive_preview 保留为反面对照：它只按 mask_below 隐藏小格却发布全部行列
+合计，敏感格可被行列合计精确反推。main 现在签发
+lakedel.attendance_disclosure.build_release 的合同化最小隐藏披露报告。
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,9 @@ import argparse
 import json
 from pathlib import Path
 
+from .attendance_disclosure import build_release
 from .engine import execute_audit
+from .util import pretty_json
 
 
 def naive_preview(data: dict, result) -> dict:
@@ -34,13 +41,13 @@ def naive_preview(data: dict, result) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Preview synthetic visible-row disclosure")
+    parser = argparse.ArgumentParser(description="Issue deletion-aware synthetic attendance disclosure")
     parser.add_argument("--fixture", type=Path, required=True)
     args = parser.parse_args(argv)
     data = json.loads(args.fixture.read_text(encoding="utf-8"))
     root = Path(__file__).resolve().parents[2]
     result = execute_audit(root / "examples/attendance_release/lake")
-    print(json.dumps(naive_preview(data, result), sort_keys=True))
+    print(pretty_json(build_release(data, result)), end="")
     return 0
 
 
